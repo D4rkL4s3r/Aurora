@@ -30,117 +30,38 @@ enum UiAction {
     RunRecursiveSearch,
 }
 
-pub struct App {
+/// État d'une vue de navigation : chemin courant, contenu, sélection,
+/// historique, recherche et tri. `App` en possède une instance aujourd'hui,
+/// plusieurs demain (vue divisée, onglets).
+struct Pane {
     current_path: PathBuf,
     entries: Vec<FileEntry>,
     history: Vec<PathBuf>,
-    drives: Vec<PathBuf>,
-    quick_access: Vec<QuickAccessEntry>,
     selection: HashSet<PathBuf>,
     selection_anchor: Option<PathBuf>,
-    clipboard: Vec<PathBuf>,
-    clipboard_cut: bool,
-    dialog: Option<Dialog>,
-    status: Option<String>,
     search_query: String,
     search_results: Option<Vec<FileEntry>>,
     sort_column: SortColumn,
     sort_ascending: bool,
 }
 
-impl Default for App {
-    fn default() -> Self {
-        let mut app = Self {
-            current_path: std::env::current_dir().unwrap_or_default(),
+impl Pane {
+    fn new(path: PathBuf) -> Self {
+        let mut pane = Self {
+            current_path: path,
             entries: Vec::new(),
             history: Vec::new(),
-            drives: fs_ops::list_drives(),
-            quick_access: fs_ops::list_quick_access(),
             selection: HashSet::new(),
             selection_anchor: None,
-            clipboard: Vec::new(),
-            clipboard_cut: false,
-            dialog: None,
-            status: None,
             search_query: String::new(),
             search_results: None,
             sort_column: SortColumn::Name,
             sort_ascending: true,
         };
-        app.reload();
-        app
+        pane.reload();
+        pane
     }
-}
 
-fn quick_access_icon(name: &str) -> &'static str {
-    match name {
-        "Bureau" => "🖥",
-        "Documents" => "📄",
-        "Téléchargements" => "⬇",
-        "Images" => "🖼",
-        "Musique" => "🎵",
-        "Vidéos" => "🎬",
-        _ => "⭐",
-    }
-}
-
-fn entry_icon(entry: &FileEntry) -> &'static str {
-    if entry.is_dir {
-        return "📁";
-    }
-    let ext = entry.extension.as_deref().map(|e| e.to_lowercase());
-    match ext.as_deref() {
-        Some(
-            "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "svg" | "ico" | "tif" | "tiff",
-        ) => "🖼",
-        Some("mp4" | "mkv" | "avi" | "mov" | "wmv" | "webm" | "flv" | "m4v") => "🎬",
-        Some("mp3" | "wav" | "flac" | "ogg" | "m4a" | "aac" | "wma" | "opus") => "🎵",
-        Some("zip" | "rar" | "7z" | "tar" | "gz" | "bz2" | "xz" | "iso" | "cab") => "🗜",
-        Some(
-            "rs" | "py" | "js" | "ts" | "tsx" | "jsx" | "c" | "cpp" | "h" | "hpp" | "java"
-            | "cs" | "go" | "rb" | "php" | "html" | "css" | "json" | "toml" | "yaml" | "yml"
-            | "xml" | "sh" | "ps1" | "bat" | "cmd" | "sql" | "md",
-        ) => "📝",
-        Some("exe" | "msi" | "lnk" | "dll") => "⚙",
-        Some("pdf") => "📕",
-        Some("xls" | "xlsx" | "ods" | "csv") => "📊",
-        Some("ppt" | "pptx" | "odp") => "📽",
-        _ => "📄",
-    }
-}
-
-fn type_label(entry: &FileEntry) -> String {
-    if entry.is_dir {
-        "Dossier".to_owned()
-    } else {
-        match &entry.extension {
-            Some(ext) => format!("Fichier {}", ext.to_uppercase()),
-            None => "Fichier".to_owned(),
-        }
-    }
-}
-
-fn format_size(bytes: u64) -> String {
-    const UNITS: [&str; 5] = ["o", "Ko", "Mo", "Go", "To"];
-    let mut value = bytes as f64;
-    let mut unit = 0;
-    while value >= 1024.0 && unit < UNITS.len() - 1 {
-        value /= 1024.0;
-        unit += 1;
-    }
-    if unit == 0 {
-        format!("{bytes} o")
-    } else {
-        format!("{value:.1} {}", UNITS[unit])
-    }
-}
-
-fn format_date(time: SystemTime) -> String {
-    let datetime: chrono::DateTime<chrono::Local> = time.into();
-    datetime.format("%d/%m/%Y %H:%M").to_string()
-}
-
-impl App {
     fn sort_entries(entries: &mut [FileEntry], column: SortColumn, ascending: bool) {
         entries.sort_by(|a, b| {
             b.is_dir.cmp(&a.is_dir).then_with(|| {
@@ -180,9 +101,7 @@ impl App {
             self.current_path = path;
             self.selection.clear();
             self.selection_anchor = None;
-            self.status = None;
-            self.search_query.clear();
-            self.search_results = None;
+            self.clear_search();
             self.reload();
         }
     }
@@ -198,11 +117,14 @@ impl App {
             self.current_path = previous;
             self.selection.clear();
             self.selection_anchor = None;
-            self.status = None;
-            self.search_query.clear();
-            self.search_results = None;
+            self.clear_search();
             self.reload();
         }
+    }
+
+    fn clear_search(&mut self) {
+        self.search_query.clear();
+        self.search_results = None;
     }
 
     /// Liste actuellement affichée : résultats de recherche récursive,
@@ -285,8 +207,162 @@ impl App {
         self.selection = self.displayed_paths().into_iter().collect();
     }
 
+    fn set_selection_to(&mut self, path: PathBuf) {
+        self.selection.clear();
+        self.selection.insert(path.clone());
+        self.selection_anchor = Some(path);
+    }
+
+    fn set_sort(&mut self, column: SortColumn) {
+        if self.sort_column == column {
+            self.sort_ascending = !self.sort_ascending;
+        } else {
+            self.sort_column = column;
+            self.sort_ascending = true;
+        }
+        Self::sort_entries(&mut self.entries, self.sort_column, self.sort_ascending);
+        if let Some(results) = &mut self.search_results {
+            Self::sort_entries(results, self.sort_column, self.sort_ascending);
+        }
+    }
+
+    /// Lance la recherche récursive et retourne le message de statut.
+    fn run_recursive_search(&mut self) -> Option<String> {
+        const MAX_DEPTH: usize = 8;
+        const MAX_RESULTS: usize = 300;
+        let query = self.search_query.trim().to_owned();
+        if query.is_empty() {
+            return None;
+        }
+        let mut results =
+            fs_ops::search_recursive(&self.current_path, &query, MAX_DEPTH, MAX_RESULTS);
+        Self::sort_entries(&mut results, self.sort_column, self.sort_ascending);
+        let capped = if results.len() >= MAX_RESULTS {
+            " (limité à 300)"
+        } else {
+            ""
+        };
+        let status = format!(
+            "{} résultat(s) dans les sous-dossiers{capped}",
+            results.len()
+        );
+        self.search_results = Some(results);
+        self.selection.clear();
+        self.selection_anchor = None;
+        Some(status)
+    }
+}
+
+pub struct App {
+    pane: Pane,
+    drives: Vec<PathBuf>,
+    quick_access: Vec<QuickAccessEntry>,
+    clipboard: Vec<PathBuf>,
+    clipboard_cut: bool,
+    dialog: Option<Dialog>,
+    status: Option<String>,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self {
+            pane: Pane::new(std::env::current_dir().unwrap_or_default()),
+            drives: fs_ops::list_drives(),
+            quick_access: fs_ops::list_quick_access(),
+            clipboard: Vec::new(),
+            clipboard_cut: false,
+            dialog: None,
+            status: None,
+        }
+    }
+}
+
+fn quick_access_icon(name: &str) -> &'static str {
+    match name {
+        "Bureau" => "🖥",
+        "Documents" => "📄",
+        "Téléchargements" => "⬇",
+        "Images" => "🖼",
+        "Musique" => "🎵",
+        "Vidéos" => "🎬",
+        _ => "⭐",
+    }
+}
+
+fn entry_icon(entry: &FileEntry) -> &'static str {
+    if entry.is_dir {
+        return "📁";
+    }
+    let ext = entry.extension.as_deref().map(|e| e.to_lowercase());
+    match ext.as_deref() {
+        Some(
+            "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "svg" | "ico" | "tif" | "tiff",
+        ) => "🖼",
+        Some("mp4" | "mkv" | "avi" | "mov" | "wmv" | "webm" | "flv" | "m4v") => "🎬",
+        Some("mp3" | "wav" | "flac" | "ogg" | "m4a" | "aac" | "wma" | "opus") => "🎵",
+        Some("zip" | "rar" | "7z" | "tar" | "gz" | "bz2" | "xz" | "iso" | "cab") => "🗜",
+        Some(
+            "rs" | "py" | "js" | "ts" | "tsx" | "jsx" | "c" | "cpp" | "h" | "hpp" | "java"
+            | "cs" | "go" | "rb" | "php" | "html" | "css" | "json" | "toml" | "yaml" | "yml"
+            | "xml" | "sh" | "ps1" | "bat" | "cmd" | "sql" | "md",
+        ) => "📝",
+        Some("exe" | "msi" | "lnk" | "dll") => "⚙",
+        Some("pdf") => "📕",
+        Some("xls" | "xlsx" | "ods" | "csv") => "📊",
+        Some("ppt" | "pptx" | "odp") => "📽",
+        _ => "📄",
+    }
+}
+
+fn type_label(entry: &FileEntry) -> String {
+    if entry.is_dir {
+        "Dossier".to_owned()
+    } else {
+        match &entry.extension {
+            Some(ext) => format!("Fichier {}", ext.to_uppercase()),
+            None => "Fichier".to_owned(),
+        }
+    }
+}
+
+fn format_size(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["o", "Ko", "Mo", "Go", "To"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} o")
+    } else {
+        format!("{value:.1} {}", UNITS[unit])
+    }
+}
+
+fn format_date(time: SystemTime) -> String {
+    let datetime: chrono::DateTime<chrono::Local> = time.into();
+    datetime.format("%d/%m/%Y %H:%M").to_string()
+}
+
+impl App {
+    fn navigate_to(&mut self, path: PathBuf) {
+        self.pane.navigate_to(path);
+        self.status = None;
+    }
+
+    fn go_parent(&mut self) {
+        self.pane.go_parent();
+        self.status = None;
+    }
+
+    fn go_back(&mut self) {
+        self.pane.go_back();
+        self.status = None;
+    }
+
     fn copy_selection(&mut self, cut: bool) {
-        let selected = self.selected_in_order();
+        let selected = self.pane.selected_in_order();
         if !selected.is_empty() {
             self.clipboard = selected;
             self.clipboard_cut = cut;
@@ -303,9 +379,9 @@ impl App {
         let mut errors = Vec::new();
         for src in &items {
             let result = if self.clipboard_cut {
-                fs_ops::move_into(src, &self.current_path)
+                fs_ops::move_into(src, &self.pane.current_path)
             } else {
-                fs_ops::copy_into(src, &self.current_path)
+                fs_ops::copy_into(src, &self.pane.current_path)
             };
             if let Err(e) = result {
                 errors.push(format!("{} : {e}", src.display()));
@@ -315,36 +391,12 @@ impl App {
             self.clipboard.clear();
             self.clipboard_cut = false;
         }
-        self.reload();
+        self.pane.reload();
         self.status = if errors.is_empty() {
             Some(format!("{} élément(s) collé(s)", items.len()))
         } else {
             Some(errors.join(" · "))
         };
-    }
-
-    fn run_recursive_search(&mut self) {
-        const MAX_DEPTH: usize = 8;
-        const MAX_RESULTS: usize = 300;
-        let query = self.search_query.trim().to_owned();
-        if query.is_empty() {
-            return;
-        }
-        let mut results =
-            fs_ops::search_recursive(&self.current_path, &query, MAX_DEPTH, MAX_RESULTS);
-        Self::sort_entries(&mut results, self.sort_column, self.sort_ascending);
-        let capped = if results.len() >= MAX_RESULTS {
-            " (limité à 300)"
-        } else {
-            ""
-        };
-        self.status = Some(format!(
-            "{} résultat(s) dans les sous-dossiers{capped}",
-            results.len()
-        ));
-        self.search_results = Some(results);
-        self.selection.clear();
-        self.selection_anchor = None;
     }
 
     fn apply_action(&mut self, action: UiAction) {
@@ -355,12 +407,10 @@ impl App {
                     self.status = Some(format!("Ouverture impossible : {e}"));
                 }
             }
-            UiAction::Select { path, ctrl, shift } => self.select(path, ctrl, shift),
+            UiAction::Select { path, ctrl, shift } => self.pane.select(path, ctrl, shift),
             UiAction::ContextSelect(path) => {
-                if !self.selection.contains(&path) {
-                    self.selection.clear();
-                    self.selection.insert(path.clone());
-                    self.selection_anchor = Some(path);
+                if !self.pane.selection.contains(&path) {
+                    self.pane.set_selection_to(path);
                 }
             }
             UiAction::StartRename(path) => {
@@ -371,26 +421,19 @@ impl App {
                 self.dialog = Some(Dialog::Rename { target: path, name });
             }
             UiAction::AskDeleteSelection => {
-                let targets = self.selected_in_order();
+                let targets = self.pane.selected_in_order();
                 if !targets.is_empty() {
                     self.dialog = Some(Dialog::ConfirmDelete { targets });
                 }
             }
             UiAction::CopySelection { cut } => self.copy_selection(cut),
             UiAction::Paste => self.paste(),
-            UiAction::SortBy(column) => {
-                if self.sort_column == column {
-                    self.sort_ascending = !self.sort_ascending;
-                } else {
-                    self.sort_column = column;
-                    self.sort_ascending = true;
-                }
-                Self::sort_entries(&mut self.entries, self.sort_column, self.sort_ascending);
-                if let Some(results) = &mut self.search_results {
-                    Self::sort_entries(results, self.sort_column, self.sort_ascending);
+            UiAction::SortBy(column) => self.pane.set_sort(column),
+            UiAction::RunRecursiveSearch => {
+                if let Some(status) = self.pane.run_recursive_search() {
+                    self.status = Some(status);
                 }
             }
-            UiAction::RunRecursiveSearch => self.run_recursive_search(),
         }
     }
 
@@ -401,9 +444,9 @@ impl App {
                 if name.is_empty() {
                     return;
                 }
-                match fs_ops::create_dir(&self.current_path, name) {
+                match fs_ops::create_dir(&self.pane.current_path, name) {
                     Ok(_) => {
-                        self.reload();
+                        self.pane.reload();
                         self.status = Some(format!("Dossier « {name} » créé"));
                     }
                     Err(e) => self.status = Some(format!("Création impossible : {e}")),
@@ -416,10 +459,9 @@ impl App {
                 }
                 match fs_ops::rename_entry(&target, name) {
                     Ok(new_path) => {
-                        self.selection.remove(&target);
-                        self.selection.insert(new_path.clone());
-                        self.selection_anchor = Some(new_path);
-                        self.reload();
+                        self.pane.selection.remove(&target);
+                        self.pane.set_selection_to(new_path);
+                        self.pane.reload();
                     }
                     Err(e) => self.status = Some(format!("Renommage impossible : {e}")),
                 }
@@ -432,7 +474,7 @@ impl App {
                     }
                     Err(e) => self.status = Some(format!("Suppression impossible : {e}")),
                 }
-                self.reload();
+                self.pane.reload();
             }
         }
     }
@@ -444,7 +486,7 @@ impl App {
         use egui::{Key, KeyboardShortcut, Modifiers};
         let ctrl = Modifiers::CTRL;
         if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::A))) {
-            self.select_all();
+            self.pane.select_all();
         }
         if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::C))) {
             actions.push(UiAction::CopySelection { cut: false });
@@ -459,7 +501,7 @@ impl App {
             actions.push(UiAction::AskDeleteSelection);
         }
         if ui.input(|i| i.key_pressed(Key::F2)) {
-            if let [single] = self.selected_in_order().as_slice() {
+            if let [single] = self.pane.selected_in_order().as_slice() {
                 actions.push(UiAction::StartRename(single.clone()));
             }
         }
@@ -559,7 +601,7 @@ impl eframe::App for App {
 
         egui::Panel::top("toolbar").show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.add_enabled_ui(!self.history.is_empty(), |ui| {
+                ui.add_enabled_ui(!self.pane.history.is_empty(), |ui| {
                     if ui.button("⬅ Précédent").clicked() {
                         self.go_back();
                     }
@@ -579,25 +621,24 @@ impl eframe::App for App {
                     }
                 });
                 ui.separator();
-                ui.label(self.current_path.display().to_string());
+                ui.label(self.pane.current_path.display().to_string());
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if !self.search_query.is_empty() && ui.button("✖").clicked() {
-                        self.search_query.clear();
-                        self.search_results = None;
+                    if !self.pane.search_query.is_empty() && ui.button("✖").clicked() {
+                        self.pane.clear_search();
                         self.status = None;
                     }
                     let edit = ui.add(
-                        egui::TextEdit::singleline(&mut self.search_query)
+                        egui::TextEdit::singleline(&mut self.pane.search_query)
                             .desired_width(200.0)
                             .hint_text("🔍 Rechercher (Entrée : sous-dossiers)"),
                     );
                     if edit.changed() {
-                        self.search_results = None;
+                        self.pane.search_results = None;
                     }
                     if edit.lost_focus()
                         && ui.input(|i| i.key_pressed(egui::Key::Enter))
-                        && !self.search_query.trim().is_empty()
+                        && !self.pane.search_query.trim().is_empty()
                     {
                         actions.push(UiAction::RunRecursiveSearch);
                     }
@@ -609,8 +650,8 @@ impl eframe::App for App {
             ui.horizontal(|ui| {
                 ui.label(format!(
                     "{} élément(s) · {} sélectionné(s)",
-                    self.displayed_count(),
-                    self.selection.len()
+                    self.pane.displayed_count(),
+                    self.pane.selection.len()
                 ));
                 if let Some(status) = &self.status {
                     ui.separator();
@@ -623,7 +664,7 @@ impl eframe::App for App {
             ui.label("Accès rapide");
             ui.separator();
             for quick_access in &self.quick_access {
-                let is_current = self.current_path.starts_with(&quick_access.path);
+                let is_current = self.pane.current_path.starts_with(&quick_access.path);
                 let icon = quick_access_icon(quick_access.name);
                 let label = format!("{icon} {}", quick_access.name);
                 if ui.selectable_label(is_current, label).clicked() {
@@ -635,7 +676,7 @@ impl eframe::App for App {
             ui.label("Lecteurs");
             ui.separator();
             for drive in &self.drives {
-                let is_current = self.current_path.starts_with(drive);
+                let is_current = self.pane.current_path.starts_with(drive);
                 let label = drive.display().to_string();
                 if ui.selectable_label(is_current, format!("💾 {label}")).clicked() {
                     actions.push(UiAction::Navigate(drive.clone()));
@@ -644,8 +685,9 @@ impl eframe::App for App {
         });
 
         {
-            let base = self.displayed_base();
-            let displayed_idx: Vec<usize> = match self.instant_filter() {
+            let pane = &self.pane;
+            let base = pane.displayed_base();
+            let displayed_idx: Vec<usize> = match pane.instant_filter() {
                 Some(query) => base
                     .iter()
                     .enumerate()
@@ -654,10 +696,10 @@ impl eframe::App for App {
                     .collect(),
                 None => (0..base.len()).collect(),
             };
-            let is_search = self.search_results.is_some();
+            let is_search = pane.search_results.is_some();
             let sort_label = |label: &str, column: SortColumn| -> String {
-                if self.sort_column == column {
-                    format!("{label} {}", if self.sort_ascending { "⬆" } else { "⬇" })
+                if pane.sort_column == column {
+                    format!("{label} {}", if pane.sort_ascending { "⬆" } else { "⬇" })
                 } else {
                     label.to_owned()
                 }
@@ -706,13 +748,13 @@ impl eframe::App for App {
                 .body(|body| {
                     body.rows(20.0, displayed_idx.len(), |mut row| {
                         let entry = &base[displayed_idx[row.index()]];
-                        let is_selected = self.selection.contains(&entry.path);
+                        let is_selected = pane.selection.contains(&entry.path);
                         row.set_selected(is_selected);
 
                         let display_name = if is_search {
                             entry
                                 .path
-                                .strip_prefix(&self.current_path)
+                                .strip_prefix(&pane.current_path)
                                 .map(|p| p.display().to_string())
                                 .unwrap_or_else(|_| entry.name.clone())
                         } else {
