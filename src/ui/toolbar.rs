@@ -2,7 +2,8 @@ use crate::actions::{Dialog, UiAction};
 use crate::app::App;
 
 pub(crate) fn show(app: &mut App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
-    egui::Panel::top("toolbar").show(ui, |ui| {
+    let frame = egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(10, 8));
+    egui::Panel::top("toolbar").frame(frame).show(ui, |ui| {
         ui.horizontal(|ui| {
             ui.add_enabled_ui(!app.pane.history.is_empty(), |ui| {
                 if ui.button("⬅ Précédent").clicked() {
@@ -44,11 +45,13 @@ pub(crate) fn show(app: &mut App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>
                     app.pane.clear_search();
                     app.status = None;
                 }
-                let edit = ui.add(
-                    egui::TextEdit::singleline(&mut app.pane.search_query)
-                        .desired_width(200.0)
-                        .hint_text("🔍 Rechercher (Entrée : sous-dossiers)"),
-                );
+                let edit = ui
+                    .add(
+                        egui::TextEdit::singleline(&mut app.pane.search_query)
+                            .desired_width(220.0)
+                            .hint_text("🔍 Rechercher…"),
+                    )
+                    .on_hover_text("Entrée : recherche aussi dans les sous-dossiers");
                 if edit.changed() {
                     app.pane.search_results = None;
                 }

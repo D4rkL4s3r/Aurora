@@ -26,6 +26,7 @@ fn main() -> eframe::Result<()> {
         options,
         Box::new(|cc| {
             cc.egui_ctx.set_theme(egui::ThemePreference::Dark);
+            ui::theme::apply(&cc.egui_ctx);
             Ok(Box::new(App::default()))
         }),
     )

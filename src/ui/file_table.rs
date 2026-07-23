@@ -90,7 +90,7 @@ fn show_content(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
             });
         })
         .body(|body| {
-            body.rows(22.0, displayed_idx.len(), |mut row| {
+            body.rows(26.0, displayed_idx.len(), |mut row| {
                 let entry = &base[displayed_idx[row.index()]];
                 let is_selected = pane.selection.contains(&entry.path);
                 row.set_selected(is_selected);

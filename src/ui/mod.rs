@@ -6,4 +6,5 @@ pub(crate) mod file_table;
 pub(crate) mod format;
 pub(crate) mod sidebar;
 pub(crate) mod statusbar;
+pub(crate) mod theme;
 pub(crate) mod toolbar;
