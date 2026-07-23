@@ -1,0 +1,4 @@
+# CRT liée statiquement : l'exe release ne dépend pas de vcruntime140.dll,
+# il tourne donc sur une machine Windows sans VC++ Redistributable installé.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
