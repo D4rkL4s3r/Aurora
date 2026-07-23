@@ -30,9 +30,9 @@ fn rounded(mut visuals: egui::Visuals) -> egui::Visuals {
 
 fn dark_visuals() -> egui::Visuals {
     let mut visuals = rounded(egui::Visuals::dark());
-    visuals.panel_fill = Color32::from_rgb(24, 26, 31);
-    visuals.extreme_bg_color = Color32::from_rgb(15, 17, 21);
-    visuals.faint_bg_color = Color32::from_rgb(31, 34, 40);
+    visuals.panel_fill = Color32::from_rgb(16, 17, 21);
+    visuals.extreme_bg_color = Color32::from_rgb(10, 11, 14);
+    visuals.faint_bg_color = Color32::from_rgb(27, 29, 35);
     visuals.selection.bg_fill = Color32::from_rgb(16, 84, 66);
     visuals.selection.stroke = Stroke::new(1.0, ACCENT);
     visuals

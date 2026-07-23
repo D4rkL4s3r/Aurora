@@ -1,12 +1,158 @@
 use crate::actions::UiAction;
 use crate::app::App;
+use crate::fs_ops::FileEntry;
 use crate::pane::SortColumn;
-use crate::ui::format::{entry_icon, format_date, format_size, type_label};
+use crate::ui::format::{entry_icon, entry_tile_color, format_date, format_size, type_label};
+use crate::ui::theme;
 
 pub(crate) fn show(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
     egui::CentralPanel::default_margins().show(ui, |ui| {
         show_content(app, ui, actions);
     });
+}
+
+fn elide(name: &str, max_chars: usize) -> String {
+    if name.chars().count() <= max_chars {
+        name.to_owned()
+    } else {
+        let mut short: String = name.chars().take(max_chars.saturating_sub(1)).collect();
+        short.push('…');
+        short
+    }
+}
+
+fn entry_context_menu(entry: &FileEntry, response: &egui::Response, actions: &mut Vec<UiAction>) {
+    response.context_menu(|ui| {
+        if !entry.is_dir && ui.button("Ouvrir").clicked() {
+            actions.push(UiAction::OpenFile(entry.path.clone()));
+            ui.close();
+        }
+        if ui.button("Renommer (F2)").clicked() {
+            actions.push(UiAction::StartRename(entry.path.clone()));
+            ui.close();
+        }
+        ui.separator();
+        if ui.button("Copier (Ctrl+C)").clicked() {
+            actions.push(UiAction::CopySelection { cut: false });
+            ui.close();
+        }
+        if ui.button("Couper (Ctrl+X)").clicked() {
+            actions.push(UiAction::CopySelection { cut: true });
+            ui.close();
+        }
+        ui.separator();
+        if ui.button("Supprimer (Suppr)").clicked() {
+            actions.push(UiAction::AskDeleteSelection);
+            ui.close();
+        }
+    });
+}
+
+fn entry_interactions(entry: &FileEntry, response: &egui::Response, actions: &mut Vec<UiAction>) {
+    if response.clicked() {
+        let modifiers = response.ctx.input(|i| i.modifiers);
+        actions.push(UiAction::Select {
+            path: entry.path.clone(),
+            ctrl: modifiers.ctrl,
+            shift: modifiers.shift,
+        });
+    }
+    if response.double_clicked() {
+        if entry.is_dir {
+            actions.push(UiAction::Navigate(entry.path.clone()));
+        } else {
+            actions.push(UiAction::OpenFile(entry.path.clone()));
+        }
+    }
+    if response.secondary_clicked() {
+        actions.push(UiAction::ContextSelect(entry.path.clone()));
+    }
+    entry_context_menu(entry, response, actions);
+}
+
+fn grid_card(app: &App, entry: &FileEntry, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
+    const CARD: egui::Vec2 = egui::Vec2::new(104.0, 118.0);
+    let (rect, response) = ui.allocate_exact_size(CARD, egui::Sense::click());
+
+    if ui.is_rect_visible(rect) {
+        let visuals = ui.visuals();
+        let selected = app.pane.selection.contains(&entry.path);
+        let is_cut = app.clipboard_cut && app.clipboard.contains(&entry.path);
+        let painter = ui.painter();
+
+        if selected {
+            painter.rect_filled(rect, 8.0, visuals.selection.bg_fill.gamma_multiply(0.55));
+            painter.rect_stroke(
+                rect,
+                8.0,
+                egui::Stroke::new(1.5, theme::ACCENT),
+                egui::StrokeKind::Inside,
+            );
+        } else if response.hovered() {
+            painter.rect_filled(rect, 8.0, visuals.faint_bg_color);
+        }
+
+        let tile = egui::Rect::from_center_size(
+            egui::Pos2::new(rect.center().x, rect.top() + 36.0),
+            egui::Vec2::splat(48.0),
+        );
+        let tile_color = if is_cut {
+            entry_tile_color(entry).gamma_multiply(0.4)
+        } else {
+            entry_tile_color(entry)
+        };
+        painter.rect_filled(tile, 10.0, tile_color);
+        painter.text(
+            tile.center(),
+            egui::Align2::CENTER_CENTER,
+            entry_icon(entry),
+            egui::FontId::proportional(24.0),
+            egui::Color32::WHITE,
+        );
+
+        let text_color = if is_cut {
+            visuals.weak_text_color()
+        } else {
+            visuals.text_color()
+        };
+        painter.text(
+            egui::Pos2::new(rect.center().x, rect.top() + 68.0),
+            egui::Align2::CENTER_TOP,
+            elide(&entry.name, 14),
+            egui::FontId::proportional(12.5),
+            text_color,
+        );
+        if !entry.is_dir {
+            painter.text(
+                egui::Pos2::new(rect.center().x, rect.top() + 88.0),
+                egui::Align2::CENTER_TOP,
+                format_size(entry.size),
+                egui::FontId::proportional(10.5),
+                visuals.weak_text_color(),
+            );
+        }
+    }
+
+    entry_interactions(entry, &response, actions);
+}
+
+fn show_grid(
+    app: &App,
+    ui: &mut egui::Ui,
+    base: &[FileEntry],
+    displayed_idx: &[usize],
+    actions: &mut Vec<UiAction>,
+) {
+    egui::ScrollArea::vertical()
+        .auto_shrink([false; 2])
+        .show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = egui::Vec2::new(10.0, 10.0);
+                for &i in displayed_idx {
+                    grid_card(app, &base[i], ui, actions);
+                }
+            });
+        });
 }
 
 fn show_content(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
@@ -41,6 +187,12 @@ fn show_content(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
             .collect(),
         None => (0..base.len()).collect(),
     };
+
+    if app.grid_view {
+        show_grid(app, ui, base, &displayed_idx, actions);
+        return;
+    }
+
     let is_search = pane.search_results.is_some();
     let sort_label = |label: &str, column: SortColumn| -> String {
         if pane.sort_column == column {
@@ -137,48 +289,7 @@ fn show_content(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
                 });
 
                 let response = row.response();
-                if response.clicked() {
-                    let modifiers = response.ctx.input(|i| i.modifiers);
-                    actions.push(UiAction::Select {
-                        path: entry.path.clone(),
-                        ctrl: modifiers.ctrl,
-                        shift: modifiers.shift,
-                    });
-                }
-                if response.double_clicked() {
-                    if entry.is_dir {
-                        actions.push(UiAction::Navigate(entry.path.clone()));
-                    } else {
-                        actions.push(UiAction::OpenFile(entry.path.clone()));
-                    }
-                }
-                if response.secondary_clicked() {
-                    actions.push(UiAction::ContextSelect(entry.path.clone()));
-                }
-                response.context_menu(|ui| {
-                    if !entry.is_dir && ui.button("Ouvrir").clicked() {
-                        actions.push(UiAction::OpenFile(entry.path.clone()));
-                        ui.close();
-                    }
-                    if ui.button("Renommer (F2)").clicked() {
-                        actions.push(UiAction::StartRename(entry.path.clone()));
-                        ui.close();
-                    }
-                    ui.separator();
-                    if ui.button("Copier (Ctrl+C)").clicked() {
-                        actions.push(UiAction::CopySelection { cut: false });
-                        ui.close();
-                    }
-                    if ui.button("Couper (Ctrl+X)").clicked() {
-                        actions.push(UiAction::CopySelection { cut: true });
-                        ui.close();
-                    }
-                    ui.separator();
-                    if ui.button("Supprimer (Suppr)").clicked() {
-                        actions.push(UiAction::AskDeleteSelection);
-                        ui.close();
-                    }
-                });
+                entry_interactions(entry, &response, actions);
             });
         });
 }

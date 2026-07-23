@@ -13,6 +13,7 @@ pub struct App {
     pub(crate) dialog: Option<Dialog>,
     pub(crate) status: Option<String>,
     pub(crate) dark_theme: bool,
+    pub(crate) grid_view: bool,
 }
 
 impl Default for App {
@@ -26,6 +27,7 @@ impl Default for App {
             dialog: None,
             status: None,
             dark_theme: true,
+            grid_view: true,
         }
     }
 }
@@ -206,7 +208,7 @@ impl eframe::App for App {
         let mut actions: Vec<UiAction> = Vec::new();
 
         ui::toolbar::show(self, ui, &mut actions);
-        ui::statusbar::show(self, ui);
+        ui::statusbar::show(self, ui, &mut actions);
         ui::sidebar::show(self, ui, &mut actions);
         ui::file_table::show(self, ui, &mut actions);
 
