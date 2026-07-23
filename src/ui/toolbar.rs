@@ -27,6 +27,19 @@ pub(crate) fn show(app: &mut App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>
             ui.label(app.pane.current_path.display().to_string());
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let theme_icon = if app.dark_theme { "☀" } else { "🌙" };
+                if ui
+                    .button(theme_icon)
+                    .on_hover_text("Changer de thème")
+                    .clicked()
+                {
+                    app.dark_theme = !app.dark_theme;
+                    ui.ctx().set_theme(if app.dark_theme {
+                        egui::ThemePreference::Dark
+                    } else {
+                        egui::ThemePreference::Light
+                    });
+                }
                 if !app.pane.search_query.is_empty() && ui.button("✖").clicked() {
                     app.pane.clear_search();
                     app.status = None;

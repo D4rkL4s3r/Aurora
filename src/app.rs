@@ -12,6 +12,7 @@ pub struct App {
     pub(crate) clipboard_cut: bool,
     pub(crate) dialog: Option<Dialog>,
     pub(crate) status: Option<String>,
+    pub(crate) dark_theme: bool,
 }
 
 impl Default for App {
@@ -24,6 +25,7 @@ impl Default for App {
             clipboard_cut: false,
             dialog: None,
             status: None,
+            dark_theme: true,
         }
     }
 }

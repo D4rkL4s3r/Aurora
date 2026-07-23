@@ -4,6 +4,12 @@ use crate::pane::SortColumn;
 use crate::ui::format::{entry_icon, format_date, format_size, type_label};
 
 pub(crate) fn show(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
+    egui::CentralPanel::default_margins().show(ui, |ui| {
+        show_content(app, ui, actions);
+    });
+}
+
+fn show_content(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
     let pane = &app.pane;
 
     if pane.is_loading() {
@@ -84,7 +90,7 @@ pub(crate) fn show(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
             });
         })
         .body(|body| {
-            body.rows(20.0, displayed_idx.len(), |mut row| {
+            body.rows(22.0, displayed_idx.len(), |mut row| {
                 let entry = &base[displayed_idx[row.index()]];
                 let is_selected = pane.selection.contains(&entry.path);
                 row.set_selected(is_selected);
@@ -106,20 +112,28 @@ pub(crate) fn show(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
                 }
 
                 row.col(|ui| {
-                    ui.label(text.clone());
+                    // Ellipse sur les noms trop longs plutôt que coupure brute
+                    ui.add(egui::Label::new(text.clone()).truncate());
                 });
                 row.col(|ui| {
-                    if entry.is_dir {
-                        ui.label("");
-                    } else {
-                        ui.label(format_size(entry.size));
+                    if !entry.is_dir {
+                        ui.add(
+                            egui::Label::new(format_size(entry.size))
+                                .wrap_mode(egui::TextWrapMode::Extend),
+                        );
                     }
                 });
                 row.col(|ui| {
-                    ui.label(type_label(entry));
+                    ui.add(
+                        egui::Label::new(type_label(entry))
+                            .wrap_mode(egui::TextWrapMode::Extend),
+                    );
                 });
                 row.col(|ui| {
-                    ui.label(entry.modified.map(format_date).unwrap_or_default());
+                    ui.add(
+                        egui::Label::new(entry.modified.map(format_date).unwrap_or_default())
+                            .wrap_mode(egui::TextWrapMode::Extend),
+                    );
                 });
 
                 let response = row.response();

@@ -24,6 +24,9 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "Aurora",
         options,
-        Box::new(|_cc| Ok(Box::new(App::default()))),
+        Box::new(|cc| {
+            cc.egui_ctx.set_theme(egui::ThemePreference::Dark);
+            Ok(Box::new(App::default()))
+        }),
     )
 }
