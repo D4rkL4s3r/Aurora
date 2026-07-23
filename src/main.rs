@@ -1,5 +1,8 @@
+mod actions;
 mod app;
 mod fs_ops;
+mod pane;
+mod ui;
 
 use app::App;
 
