@@ -1,11 +1,20 @@
 use crate::fs_ops::{self, FileEntry, QuickAccessEntry};
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::time::SystemTime;
 
 enum Dialog {
     NewFolder { name: String },
     Rename { target: PathBuf, name: String },
     ConfirmDelete { targets: Vec<PathBuf> },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SortColumn {
+    Name,
+    Size,
+    Type,
+    Modified,
 }
 
 enum UiAction {
@@ -17,6 +26,8 @@ enum UiAction {
     AskDeleteSelection,
     CopySelection { cut: bool },
     Paste,
+    SortBy(SortColumn),
+    RunRecursiveSearch,
 }
 
 pub struct App {
@@ -31,6 +42,10 @@ pub struct App {
     clipboard_cut: bool,
     dialog: Option<Dialog>,
     status: Option<String>,
+    search_query: String,
+    search_results: Option<Vec<FileEntry>>,
+    sort_column: SortColumn,
+    sort_ascending: bool,
 }
 
 impl Default for App {
@@ -47,6 +62,10 @@ impl Default for App {
             clipboard_cut: false,
             dialog: None,
             status: None,
+            search_query: String::new(),
+            search_results: None,
+            sort_column: SortColumn::Name,
+            sort_ascending: true,
         };
         app.reload();
         app
@@ -65,15 +84,93 @@ fn quick_access_icon(name: &str) -> &'static str {
     }
 }
 
+fn entry_icon(entry: &FileEntry) -> &'static str {
+    if entry.is_dir {
+        return "📁";
+    }
+    let ext = entry.extension.as_deref().map(|e| e.to_lowercase());
+    match ext.as_deref() {
+        Some(
+            "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "svg" | "ico" | "tif" | "tiff",
+        ) => "🖼",
+        Some("mp4" | "mkv" | "avi" | "mov" | "wmv" | "webm" | "flv" | "m4v") => "🎬",
+        Some("mp3" | "wav" | "flac" | "ogg" | "m4a" | "aac" | "wma" | "opus") => "🎵",
+        Some("zip" | "rar" | "7z" | "tar" | "gz" | "bz2" | "xz" | "iso" | "cab") => "🗜",
+        Some(
+            "rs" | "py" | "js" | "ts" | "tsx" | "jsx" | "c" | "cpp" | "h" | "hpp" | "java"
+            | "cs" | "go" | "rb" | "php" | "html" | "css" | "json" | "toml" | "yaml" | "yml"
+            | "xml" | "sh" | "ps1" | "bat" | "cmd" | "sql" | "md",
+        ) => "📝",
+        Some("exe" | "msi" | "lnk" | "dll") => "⚙",
+        Some("pdf") => "📕",
+        Some("xls" | "xlsx" | "ods" | "csv") => "📊",
+        Some("ppt" | "pptx" | "odp") => "📽",
+        _ => "📄",
+    }
+}
+
+fn type_label(entry: &FileEntry) -> String {
+    if entry.is_dir {
+        "Dossier".to_owned()
+    } else {
+        match &entry.extension {
+            Some(ext) => format!("Fichier {}", ext.to_uppercase()),
+            None => "Fichier".to_owned(),
+        }
+    }
+}
+
+fn format_size(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["o", "Ko", "Mo", "Go", "To"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} o")
+    } else {
+        format!("{value:.1} {}", UNITS[unit])
+    }
+}
+
+fn format_date(time: SystemTime) -> String {
+    let datetime: chrono::DateTime<chrono::Local> = time.into();
+    datetime.format("%d/%m/%Y %H:%M").to_string()
+}
+
 impl App {
+    fn sort_entries(entries: &mut [FileEntry], column: SortColumn, ascending: bool) {
+        entries.sort_by(|a, b| {
+            b.is_dir.cmp(&a.is_dir).then_with(|| {
+                let ord = match column {
+                    SortColumn::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+                    SortColumn::Size => a.size.cmp(&b.size),
+                    SortColumn::Type => {
+                        let ext_a = a.extension.as_deref().unwrap_or("").to_lowercase();
+                        let ext_b = b.extension.as_deref().unwrap_or("").to_lowercase();
+                        ext_a
+                            .cmp(&ext_b)
+                            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+                    }
+                    SortColumn::Modified => a.modified.cmp(&b.modified),
+                };
+                if ascending { ord } else { ord.reverse() }
+            })
+        });
+    }
+
     fn reload(&mut self) {
         self.entries = fs_ops::list_dir(&self.current_path).unwrap_or_default();
-        self.entries.sort_by(|a, b| {
-            b.is_dir
-                .cmp(&a.is_dir)
-                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-        });
-        let existing: HashSet<&PathBuf> = self.entries.iter().map(|e| &e.path).collect();
+        Self::sort_entries(&mut self.entries, self.sort_column, self.sort_ascending);
+        if let Some(results) = &mut self.search_results {
+            results.retain(|e| e.path.exists());
+        }
+        let mut existing: HashSet<&PathBuf> = self.entries.iter().map(|e| &e.path).collect();
+        if let Some(results) = &self.search_results {
+            existing.extend(results.iter().map(|e| &e.path));
+        }
         self.selection.retain(|p| existing.contains(p));
     }
 
@@ -84,6 +181,8 @@ impl App {
             self.selection.clear();
             self.selection_anchor = None;
             self.status = None;
+            self.search_query.clear();
+            self.search_results = None;
             self.reload();
         }
     }
@@ -100,33 +199,73 @@ impl App {
             self.selection.clear();
             self.selection_anchor = None;
             self.status = None;
+            self.search_query.clear();
+            self.search_results = None;
             self.reload();
+        }
+    }
+
+    /// Liste actuellement affichée : résultats de recherche récursive,
+    /// ou contenu du dossier (filtré par la recherche instantanée).
+    fn displayed_base(&self) -> &[FileEntry] {
+        match &self.search_results {
+            Some(results) => results,
+            None => &self.entries,
+        }
+    }
+
+    fn instant_filter(&self) -> Option<String> {
+        let query = self.search_query.trim();
+        (self.search_results.is_none() && !query.is_empty()).then(|| query.to_lowercase())
+    }
+
+    /// Chemins affichés, dans l'ordre d'affichage.
+    fn displayed_paths(&self) -> Vec<PathBuf> {
+        let base = self.displayed_base();
+        match self.instant_filter() {
+            Some(query) => base
+                .iter()
+                .filter(|e| e.name.to_lowercase().contains(&query))
+                .map(|e| e.path.clone())
+                .collect(),
+            None => base.iter().map(|e| e.path.clone()).collect(),
+        }
+    }
+
+    fn displayed_count(&self) -> usize {
+        match self.instant_filter() {
+            Some(query) => self
+                .displayed_base()
+                .iter()
+                .filter(|e| e.name.to_lowercase().contains(&query))
+                .count(),
+            None => self.displayed_base().len(),
         }
     }
 
     /// Chemins sélectionnés, dans l'ordre d'affichage.
     fn selected_in_order(&self) -> Vec<PathBuf> {
-        self.entries
-            .iter()
-            .filter(|e| self.selection.contains(&e.path))
-            .map(|e| e.path.clone())
+        self.displayed_paths()
+            .into_iter()
+            .filter(|p| self.selection.contains(p))
             .collect()
     }
 
     fn select(&mut self, path: PathBuf, ctrl: bool, shift: bool) {
+        let displayed = self.displayed_paths();
         if shift {
             let anchor = self
                 .selection_anchor
                 .as_ref()
-                .and_then(|a| self.entries.iter().position(|e| &e.path == a));
-            let clicked = self.entries.iter().position(|e| e.path == path);
+                .and_then(|a| displayed.iter().position(|p| p == a));
+            let clicked = displayed.iter().position(|p| p == &path);
             if let (Some(anchor), Some(clicked)) = (anchor, clicked) {
                 let (from, to) = (anchor.min(clicked), anchor.max(clicked));
                 if !ctrl {
                     self.selection.clear();
                 }
-                for entry in &self.entries[from..=to] {
-                    self.selection.insert(entry.path.clone());
+                for p in &displayed[from..=to] {
+                    self.selection.insert(p.clone());
                 }
                 return; // l'ancre ne bouge pas : Shift+clic successifs étendent depuis la même origine
             }
@@ -143,7 +282,7 @@ impl App {
     }
 
     fn select_all(&mut self) {
-        self.selection = self.entries.iter().map(|e| e.path.clone()).collect();
+        self.selection = self.displayed_paths().into_iter().collect();
     }
 
     fn copy_selection(&mut self, cut: bool) {
@@ -184,6 +323,30 @@ impl App {
         };
     }
 
+    fn run_recursive_search(&mut self) {
+        const MAX_DEPTH: usize = 8;
+        const MAX_RESULTS: usize = 300;
+        let query = self.search_query.trim().to_owned();
+        if query.is_empty() {
+            return;
+        }
+        let mut results =
+            fs_ops::search_recursive(&self.current_path, &query, MAX_DEPTH, MAX_RESULTS);
+        Self::sort_entries(&mut results, self.sort_column, self.sort_ascending);
+        let capped = if results.len() >= MAX_RESULTS {
+            " (limité à 300)"
+        } else {
+            ""
+        };
+        self.status = Some(format!(
+            "{} résultat(s) dans les sous-dossiers{capped}",
+            results.len()
+        ));
+        self.search_results = Some(results);
+        self.selection.clear();
+        self.selection_anchor = None;
+    }
+
     fn apply_action(&mut self, action: UiAction) {
         match action {
             UiAction::Navigate(path) => self.navigate_to(path),
@@ -215,6 +378,19 @@ impl App {
             }
             UiAction::CopySelection { cut } => self.copy_selection(cut),
             UiAction::Paste => self.paste(),
+            UiAction::SortBy(column) => {
+                if self.sort_column == column {
+                    self.sort_ascending = !self.sort_ascending;
+                } else {
+                    self.sort_column = column;
+                    self.sort_ascending = true;
+                }
+                Self::sort_entries(&mut self.entries, self.sort_column, self.sort_ascending);
+                if let Some(results) = &mut self.search_results {
+                    Self::sort_entries(results, self.sort_column, self.sort_ascending);
+                }
+            }
+            UiAction::RunRecursiveSearch => self.run_recursive_search(),
         }
     }
 
@@ -404,6 +580,28 @@ impl eframe::App for App {
                 });
                 ui.separator();
                 ui.label(self.current_path.display().to_string());
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if !self.search_query.is_empty() && ui.button("✖").clicked() {
+                        self.search_query.clear();
+                        self.search_results = None;
+                        self.status = None;
+                    }
+                    let edit = ui.add(
+                        egui::TextEdit::singleline(&mut self.search_query)
+                            .desired_width(200.0)
+                            .hint_text("🔍 Rechercher (Entrée : sous-dossiers)"),
+                    );
+                    if edit.changed() {
+                        self.search_results = None;
+                    }
+                    if edit.lost_focus()
+                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                        && !self.search_query.trim().is_empty()
+                    {
+                        actions.push(UiAction::RunRecursiveSearch);
+                    }
+                });
             });
         });
 
@@ -411,7 +609,7 @@ impl eframe::App for App {
             ui.horizontal(|ui| {
                 ui.label(format!(
                     "{} élément(s) · {} sélectionné(s)",
-                    self.entries.len(),
+                    self.displayed_count(),
                     self.selection.len()
                 ));
                 if let Some(status) = &self.status {
@@ -445,61 +643,152 @@ impl eframe::App for App {
             }
         });
 
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            for entry in &self.entries {
-                let icon = if entry.is_dir { "📁" } else { "📄" };
-                let is_selected = self.selection.contains(&entry.path);
-                let is_cut = self.clipboard_cut && self.clipboard.contains(&entry.path);
-                let mut text = egui::RichText::new(format!("{icon} {}", entry.name));
-                if is_cut {
-                    text = text.weak();
+        {
+            let base = self.displayed_base();
+            let displayed_idx: Vec<usize> = match self.instant_filter() {
+                Some(query) => base
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, e)| e.name.to_lowercase().contains(&query))
+                    .map(|(i, _)| i)
+                    .collect(),
+                None => (0..base.len()).collect(),
+            };
+            let is_search = self.search_results.is_some();
+            let sort_label = |label: &str, column: SortColumn| -> String {
+                if self.sort_column == column {
+                    format!("{label} {}", if self.sort_ascending { "⬆" } else { "⬇" })
+                } else {
+                    label.to_owned()
                 }
-                let response = ui.selectable_label(is_selected, text);
+            };
 
-                if response.clicked() {
-                    let modifiers = ui.input(|i| i.modifiers);
-                    actions.push(UiAction::Select {
-                        path: entry.path.clone(),
-                        ctrl: modifiers.ctrl,
-                        shift: modifiers.shift,
+            egui_extras::TableBuilder::new(ui)
+                .striped(true)
+                .resizable(true)
+                .sense(egui::Sense::click())
+                .column(egui_extras::Column::remainder().clip(true))
+                .column(egui_extras::Column::auto())
+                .column(egui_extras::Column::auto())
+                .column(egui_extras::Column::auto())
+                .header(22.0, |mut header| {
+                    header.col(|ui| {
+                        if ui.selectable_label(false, sort_label("Nom", SortColumn::Name)).clicked()
+                        {
+                            actions.push(UiAction::SortBy(SortColumn::Name));
+                        }
                     });
-                }
-                if response.double_clicked() {
-                    if entry.is_dir {
-                        actions.push(UiAction::Navigate(entry.path.clone()));
-                    } else {
-                        actions.push(UiAction::OpenFile(entry.path.clone()));
-                    }
-                }
-                if response.secondary_clicked() {
-                    actions.push(UiAction::ContextSelect(entry.path.clone()));
-                }
-                response.context_menu(|ui| {
-                    if !entry.is_dir && ui.button("Ouvrir").clicked() {
-                        actions.push(UiAction::OpenFile(entry.path.clone()));
-                        ui.close();
-                    }
-                    if ui.button("Renommer (F2)").clicked() {
-                        actions.push(UiAction::StartRename(entry.path.clone()));
-                        ui.close();
-                    }
-                    ui.separator();
-                    if ui.button("Copier (Ctrl+C)").clicked() {
-                        actions.push(UiAction::CopySelection { cut: false });
-                        ui.close();
-                    }
-                    if ui.button("Couper (Ctrl+X)").clicked() {
-                        actions.push(UiAction::CopySelection { cut: true });
-                        ui.close();
-                    }
-                    ui.separator();
-                    if ui.button("Supprimer (Suppr)").clicked() {
-                        actions.push(UiAction::AskDeleteSelection);
-                        ui.close();
-                    }
+                    header.col(|ui| {
+                        if ui
+                            .selectable_label(false, sort_label("Taille", SortColumn::Size))
+                            .clicked()
+                        {
+                            actions.push(UiAction::SortBy(SortColumn::Size));
+                        }
+                    });
+                    header.col(|ui| {
+                        if ui
+                            .selectable_label(false, sort_label("Type", SortColumn::Type))
+                            .clicked()
+                        {
+                            actions.push(UiAction::SortBy(SortColumn::Type));
+                        }
+                    });
+                    header.col(|ui| {
+                        if ui
+                            .selectable_label(false, sort_label("Modifié", SortColumn::Modified))
+                            .clicked()
+                        {
+                            actions.push(UiAction::SortBy(SortColumn::Modified));
+                        }
+                    });
+                })
+                .body(|body| {
+                    body.rows(20.0, displayed_idx.len(), |mut row| {
+                        let entry = &base[displayed_idx[row.index()]];
+                        let is_selected = self.selection.contains(&entry.path);
+                        row.set_selected(is_selected);
+
+                        let display_name = if is_search {
+                            entry
+                                .path
+                                .strip_prefix(&self.current_path)
+                                .map(|p| p.display().to_string())
+                                .unwrap_or_else(|_| entry.name.clone())
+                        } else {
+                            entry.name.clone()
+                        };
+                        let is_cut =
+                            self.clipboard_cut && self.clipboard.contains(&entry.path);
+                        let mut text =
+                            egui::RichText::new(format!("{} {display_name}", entry_icon(entry)));
+                        if is_cut {
+                            text = text.weak();
+                        }
+
+                        row.col(|ui| {
+                            ui.label(text.clone());
+                        });
+                        row.col(|ui| {
+                            if entry.is_dir {
+                                ui.label("");
+                            } else {
+                                ui.label(format_size(entry.size));
+                            }
+                        });
+                        row.col(|ui| {
+                            ui.label(type_label(entry));
+                        });
+                        row.col(|ui| {
+                            ui.label(entry.modified.map(format_date).unwrap_or_default());
+                        });
+
+                        let response = row.response();
+                        if response.clicked() {
+                            let modifiers = response.ctx.input(|i| i.modifiers);
+                            actions.push(UiAction::Select {
+                                path: entry.path.clone(),
+                                ctrl: modifiers.ctrl,
+                                shift: modifiers.shift,
+                            });
+                        }
+                        if response.double_clicked() {
+                            if entry.is_dir {
+                                actions.push(UiAction::Navigate(entry.path.clone()));
+                            } else {
+                                actions.push(UiAction::OpenFile(entry.path.clone()));
+                            }
+                        }
+                        if response.secondary_clicked() {
+                            actions.push(UiAction::ContextSelect(entry.path.clone()));
+                        }
+                        response.context_menu(|ui| {
+                            if !entry.is_dir && ui.button("Ouvrir").clicked() {
+                                actions.push(UiAction::OpenFile(entry.path.clone()));
+                                ui.close();
+                            }
+                            if ui.button("Renommer (F2)").clicked() {
+                                actions.push(UiAction::StartRename(entry.path.clone()));
+                                ui.close();
+                            }
+                            ui.separator();
+                            if ui.button("Copier (Ctrl+C)").clicked() {
+                                actions.push(UiAction::CopySelection { cut: false });
+                                ui.close();
+                            }
+                            if ui.button("Couper (Ctrl+X)").clicked() {
+                                actions.push(UiAction::CopySelection { cut: true });
+                                ui.close();
+                            }
+                            ui.separator();
+                            if ui.button("Supprimer (Suppr)").clicked() {
+                                actions.push(UiAction::AskDeleteSelection);
+                                ui.close();
+                            }
+                        });
+                    });
                 });
-            }
-        });
+        }
 
         self.handle_shortcuts(ui, &mut actions);
 
