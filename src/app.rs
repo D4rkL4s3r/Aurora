@@ -193,6 +193,14 @@ impl App {
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.pane.poll_load();
+        if self.pane.is_loading() {
+            // Repeindre régulièrement tant que le thread de chargement travaille,
+            // sinon le résultat n'est intégré qu'à la prochaine interaction.
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(50));
+        }
+
         let mut actions: Vec<UiAction> = Vec::new();
 
         ui::toolbar::show(self, ui, &mut actions);

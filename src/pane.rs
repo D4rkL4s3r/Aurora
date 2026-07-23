@@ -1,6 +1,7 @@
 use crate::fs_ops::{self, FileEntry};
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::mpsc::{self, Receiver, TryRecvError};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SortColumn {
@@ -23,6 +24,10 @@ pub(crate) struct Pane {
     pub(crate) search_results: Option<Vec<FileEntry>>,
     pub(crate) sort_column: SortColumn,
     pub(crate) sort_ascending: bool,
+    /// Canal du chargement en cours. Remplacer le receiver abandonne
+    /// silencieusement le résultat du chargement précédent.
+    pending_load: Option<Receiver<std::io::Result<Vec<FileEntry>>>>,
+    pub(crate) load_error: Option<String>,
 }
 
 impl Pane {
@@ -37,6 +42,8 @@ impl Pane {
             search_results: None,
             sort_column: SortColumn::Name,
             sort_ascending: true,
+            pending_load: None,
+            load_error: None,
         };
         pane.reload();
         pane
@@ -62,9 +69,47 @@ impl Pane {
         });
     }
 
+    /// Lance le chargement du dossier courant dans un thread de fond.
+    /// Le résultat sera intégré par [`Self::poll_load`].
     pub(crate) fn reload(&mut self) {
-        self.entries = fs_ops::list_dir(&self.current_path).unwrap_or_default();
-        Self::sort_entries(&mut self.entries, self.sort_column, self.sort_ascending);
+        let (tx, rx) = mpsc::channel();
+        let path = self.current_path.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(fs_ops::list_dir(&path));
+        });
+        self.pending_load = Some(rx);
+    }
+
+    pub(crate) fn is_loading(&self) -> bool {
+        self.pending_load.is_some()
+    }
+
+    /// Intègre le résultat du chargement en cours s'il est arrivé.
+    /// À appeler à chaque frame avant le rendu.
+    pub(crate) fn poll_load(&mut self) {
+        let Some(rx) = &self.pending_load else {
+            return;
+        };
+        let result = match rx.try_recv() {
+            Ok(result) => result,
+            Err(TryRecvError::Empty) => return,
+            Err(TryRecvError::Disconnected) => {
+                self.pending_load = None;
+                return;
+            }
+        };
+        self.pending_load = None;
+        match result {
+            Ok(mut entries) => {
+                Self::sort_entries(&mut entries, self.sort_column, self.sort_ascending);
+                self.entries = entries;
+                self.load_error = None;
+            }
+            Err(e) => {
+                self.entries = Vec::new();
+                self.load_error = Some(e.to_string());
+            }
+        }
         if let Some(results) = &mut self.search_results {
             results.retain(|e| e.path.exists());
         }
@@ -79,6 +124,8 @@ impl Pane {
         if path != self.current_path {
             self.history.push(self.current_path.clone());
             self.current_path = path;
+            self.entries.clear();
+            self.load_error = None;
             self.selection.clear();
             self.selection_anchor = None;
             self.clear_search();
@@ -95,6 +142,8 @@ impl Pane {
     pub(crate) fn go_back(&mut self) {
         if let Some(previous) = self.history.pop() {
             self.current_path = previous;
+            self.entries.clear();
+            self.load_error = None;
             self.selection.clear();
             self.selection_anchor = None;
             self.clear_search();
@@ -230,5 +279,42 @@ impl Pane {
         self.selection.clear();
         self.selection_anchor = None;
         Some(status)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    fn wait_for_load(pane: &mut Pane) {
+        let start = Instant::now();
+        while pane.is_loading() {
+            assert!(start.elapsed() < Duration::from_secs(5), "chargement trop long");
+            pane.poll_load();
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn pane_loads_directory_asynchronously() {
+        let sandbox = crate::fs_ops::temp_sandbox("pane_load");
+        std::fs::write(sandbox.join("fichier.txt"), "x").unwrap();
+
+        let mut pane = Pane::new(sandbox.clone());
+        wait_for_load(&mut pane);
+
+        assert!(pane.load_error.is_none());
+        assert_eq!(pane.entries.len(), 1);
+        let _ = std::fs::remove_dir_all(&sandbox);
+    }
+
+    #[test]
+    fn pane_reports_error_on_missing_directory() {
+        let mut pane = Pane::new(PathBuf::from("Z:\\dossier_inexistant_aurora"));
+        wait_for_load(&mut pane);
+
+        assert!(pane.load_error.is_some());
+        assert!(pane.entries.is_empty());
     }
 }

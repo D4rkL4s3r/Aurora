@@ -5,6 +5,26 @@ use crate::ui::format::{entry_icon, format_date, format_size, type_label};
 
 pub(crate) fn show(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
     let pane = &app.pane;
+
+    if pane.is_loading() {
+        ui.centered_and_justified(|ui| {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label("Chargement…");
+            });
+        });
+        return;
+    }
+    if let Some(error) = &pane.load_error {
+        ui.centered_and_justified(|ui| {
+            ui.label(
+                egui::RichText::new(format!("⚠ Impossible d'ouvrir ce dossier : {error}"))
+                    .color(ui.visuals().warn_fg_color),
+            );
+        });
+        return;
+    }
+
     let base = pane.displayed_base();
     let displayed_idx: Vec<usize> = match pane.instant_filter() {
         Some(query) => base
