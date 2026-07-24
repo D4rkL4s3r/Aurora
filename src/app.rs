@@ -1,14 +1,15 @@
 use crate::actions::{Dialog, DragPayload, UiAction};
 use crate::fs_ops::{self, QuickAccessEntry};
 use crate::pane::Pane;
+use crate::tab::Tab;
 use crate::ui;
 use std::path::PathBuf;
 
 pub struct App {
-    /// Volets ouverts : un seul en vue simple, deux en vue divisée.
-    pub(crate) panes: Vec<Pane>,
-    /// Index du volet actif, cible de la toolbar, de la sidebar et des raccourcis.
-    pub(crate) active_pane: usize,
+    /// Onglets ouverts (toujours au moins un).
+    pub(crate) tabs: Vec<Tab>,
+    /// Index de l'onglet actif, cible de la toolbar, de la sidebar et des raccourcis.
+    pub(crate) active_tab: usize,
     pub(crate) drives: Vec<PathBuf>,
     pub(crate) quick_access: Vec<QuickAccessEntry>,
     pub(crate) clipboard: Vec<PathBuf>,
@@ -24,8 +25,8 @@ pub struct App {
 impl Default for App {
     fn default() -> Self {
         Self {
-            panes: vec![Pane::new(std::env::current_dir().unwrap_or_default())],
-            active_pane: 0,
+            tabs: vec![Tab::new(std::env::current_dir().unwrap_or_default())],
+            active_tab: 0,
             drives: fs_ops::list_drives(),
             quick_access: fs_ops::list_quick_access(),
             clipboard: Vec::new(),
@@ -40,34 +41,58 @@ impl Default for App {
 }
 
 impl App {
+    pub(crate) fn tab(&self) -> &Tab {
+        &self.tabs[self.active_tab]
+    }
+
+    pub(crate) fn tab_mut(&mut self) -> &mut Tab {
+        &mut self.tabs[self.active_tab]
+    }
+
     pub(crate) fn pane(&self) -> &Pane {
-        &self.panes[self.active_pane]
+        self.tab().pane()
     }
 
     pub(crate) fn pane_mut(&mut self) -> &mut Pane {
-        &mut self.panes[self.active_pane]
+        self.tab_mut().pane_mut()
     }
 
     pub(crate) fn is_split(&self) -> bool {
-        self.panes.len() > 1
+        self.tab().is_split()
     }
 
     pub(crate) fn toggle_split(&mut self) {
-        if self.is_split() {
-            self.panes.truncate(1);
-            self.active_pane = 0;
-        } else {
-            let path = self.panes[0].current_path.clone();
-            self.panes.push(Pane::new(path));
-            self.active_pane = 1;
-        }
+        self.tab_mut().toggle_split();
     }
 
-    /// Recharge tous les volets : après une opération fichier, chaque volet
-    /// peut afficher le dossier modifié.
+    pub(crate) fn new_tab(&mut self) {
+        let path = self.pane().current_path.clone();
+        self.tabs.push(Tab::new(path));
+        self.active_tab = self.tabs.len() - 1;
+    }
+
+    pub(crate) fn close_tab(&mut self, idx: usize) {
+        if self.tabs.len() <= 1 {
+            return;
+        }
+        self.tabs.remove(idx);
+        if self.active_tab >= idx && self.active_tab > 0 {
+            self.active_tab -= 1;
+        }
+        self.active_tab = self.active_tab.min(self.tabs.len() - 1);
+    }
+
+    pub(crate) fn next_tab(&mut self) {
+        self.active_tab = (self.active_tab + 1) % self.tabs.len();
+    }
+
+    /// Recharge tous les volets de tous les onglets : après une opération
+    /// fichier, chacun peut afficher le dossier modifié.
     fn reload_panes(&mut self) {
-        for pane in &mut self.panes {
-            pane.reload();
+        for tab in &mut self.tabs {
+            for pane in &mut tab.panes {
+                pane.reload();
+            }
         }
     }
 
@@ -128,7 +153,8 @@ impl App {
     fn apply_action(&mut self, action: UiAction) {
         match action {
             UiAction::FocusPane(idx) => {
-                self.active_pane = idx.min(self.panes.len().saturating_sub(1));
+                let tab = self.tab_mut();
+                tab.active_pane = idx.min(tab.panes.len().saturating_sub(1));
             }
             UiAction::Navigate(path) => self.navigate_to(path),
             UiAction::OpenFile(path) => {
@@ -361,15 +387,31 @@ impl App {
                 actions.push(UiAction::StartRename(single.clone()));
             }
         }
+        if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::T))) {
+            self.new_tab();
+        }
+        if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::W))) {
+            self.close_tab(self.active_tab);
+        }
+        if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::Tab))) {
+            self.next_tab();
+        }
     }
 }
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        for pane in &mut self.panes {
-            pane.poll_load();
+        for tab in &mut self.tabs {
+            for pane in &mut tab.panes {
+                pane.poll_load();
+            }
         }
-        if self.panes.iter().any(Pane::is_loading) {
+        if self
+            .tabs
+            .iter()
+            .flat_map(|t| t.panes.iter())
+            .any(Pane::is_loading)
+        {
             // Repeindre régulièrement tant qu'un thread de chargement travaille,
             // sinon le résultat n'est intégré qu'à la prochaine interaction.
             ui.ctx()
@@ -378,6 +420,7 @@ impl eframe::App for App {
 
         let mut actions: Vec<UiAction> = Vec::new();
 
+        ui::tabs::show(self, ui);
         ui::toolbar::show(self, ui, &mut actions);
         ui::statusbar::show(self, ui, &mut actions);
         ui::sidebar::show(self, ui, &mut actions);

@@ -7,23 +7,26 @@ use crate::ui::theme;
 
 pub(crate) fn show(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
     egui::CentralPanel::default_margins().show(ui, |ui| {
-        if app.is_split() {
-            ui.columns(app.panes.len(), |cols| {
-                for (idx, col) in cols.iter_mut().enumerate() {
-                    pane_frame(app, idx, col, actions);
-                }
-            });
-        } else {
-            show_content(app, 0, ui, actions);
-            background_drop(&app.panes[0], ui, actions);
-        }
+        // Chaque onglet garde son propre état d'affichage (scroll, largeurs).
+        ui.push_id(("tab", app.active_tab), |ui| {
+            if app.is_split() {
+                ui.columns(app.tab().panes.len(), |cols| {
+                    for (idx, col) in cols.iter_mut().enumerate() {
+                        pane_frame(app, idx, col, actions);
+                    }
+                });
+            } else {
+                show_content(app, 0, ui, actions);
+                background_drop(&app.tab().panes[0], ui, actions);
+            }
+        });
     });
 }
 
 /// Un volet de la vue divisée : cadre (accentué pour le volet actif),
 /// clic n'importe où dedans → devient le volet actif.
 fn pane_frame(app: &App, idx: usize, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
-    let active = idx == app.active_pane;
+    let active = idx == app.tab().active_pane;
     let stroke = if active {
         egui::Stroke::new(1.5, theme::ACCENT.gamma_multiply(0.7))
     } else {
@@ -43,7 +46,7 @@ fn pane_frame(app: &App, idx: usize, ui: &mut egui::Ui, actions: &mut Vec<UiActi
                 actions.push(UiAction::FocusPane(idx));
             }
             ui.push_id(idx, |ui| show_content(app, idx, ui, actions));
-            background_drop(&app.panes[idx], ui, actions);
+            background_drop(&app.tab().panes[idx], ui, actions);
         });
 }
 
@@ -293,7 +296,7 @@ fn show_grid(
 }
 
 fn show_content(app: &App, pane_idx: usize, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
-    let pane = &app.panes[pane_idx];
+    let pane = &app.tab().panes[pane_idx];
 
     if pane.is_loading() {
         ui.centered_and_justified(|ui| {

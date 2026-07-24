@@ -36,7 +36,8 @@ fn breadcrumb(pane: &Pane, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
 /// Barre d'adresse éditable : Entrée valide le chemin, Échap ou perte de
 /// focus annule et réaffiche le breadcrumb.
 fn address_bar(app: &mut App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
-    let pane = &mut app.panes[app.active_pane];
+    let tab = &mut app.tabs[app.active_tab];
+    let pane = tab.pane_mut();
     let Some(text) = pane.address_edit.as_mut() else {
         return;
     };
@@ -129,7 +130,7 @@ pub(crate) fn show(app: &mut App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>
                 }
                 let edit = ui
                     .add(
-                        egui::TextEdit::singleline(&mut app.panes[app.active_pane].search_query)
+                        egui::TextEdit::singleline(&mut app.pane_mut().search_query)
                             .desired_width(220.0)
                             .hint_text("🔍 Rechercher…"),
                     )
