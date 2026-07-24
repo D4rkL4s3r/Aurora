@@ -5,7 +5,10 @@ use crate::ui;
 use std::path::PathBuf;
 
 pub struct App {
-    pub(crate) pane: Pane,
+    /// Volets ouverts : un seul en vue simple, deux en vue divisée.
+    pub(crate) panes: Vec<Pane>,
+    /// Index du volet actif, cible de la toolbar, de la sidebar et des raccourcis.
+    pub(crate) active_pane: usize,
     pub(crate) drives: Vec<PathBuf>,
     pub(crate) quick_access: Vec<QuickAccessEntry>,
     pub(crate) clipboard: Vec<PathBuf>,
@@ -19,7 +22,8 @@ pub struct App {
 impl Default for App {
     fn default() -> Self {
         Self {
-            pane: Pane::new(std::env::current_dir().unwrap_or_default()),
+            panes: vec![Pane::new(std::env::current_dir().unwrap_or_default())],
+            active_pane: 0,
             drives: fs_ops::list_drives(),
             quick_access: fs_ops::list_quick_access(),
             clipboard: Vec::new(),
@@ -33,23 +37,54 @@ impl Default for App {
 }
 
 impl App {
+    pub(crate) fn pane(&self) -> &Pane {
+        &self.panes[self.active_pane]
+    }
+
+    pub(crate) fn pane_mut(&mut self) -> &mut Pane {
+        &mut self.panes[self.active_pane]
+    }
+
+    pub(crate) fn is_split(&self) -> bool {
+        self.panes.len() > 1
+    }
+
+    pub(crate) fn toggle_split(&mut self) {
+        if self.is_split() {
+            self.panes.truncate(1);
+            self.active_pane = 0;
+        } else {
+            let path = self.panes[0].current_path.clone();
+            self.panes.push(Pane::new(path));
+            self.active_pane = 1;
+        }
+    }
+
+    /// Recharge tous les volets : après une opération fichier, chaque volet
+    /// peut afficher le dossier modifié.
+    fn reload_panes(&mut self) {
+        for pane in &mut self.panes {
+            pane.reload();
+        }
+    }
+
     fn navigate_to(&mut self, path: PathBuf) {
-        self.pane.navigate_to(path);
+        self.pane_mut().navigate_to(path);
         self.status = None;
     }
 
     pub(crate) fn go_parent(&mut self) {
-        self.pane.go_parent();
+        self.pane_mut().go_parent();
         self.status = None;
     }
 
     pub(crate) fn go_back(&mut self) {
-        self.pane.go_back();
+        self.pane_mut().go_back();
         self.status = None;
     }
 
     fn copy_selection(&mut self, cut: bool) {
-        let selected = self.pane.selected_in_order();
+        let selected = self.pane().selected_in_order();
         if !selected.is_empty() {
             self.clipboard = selected;
             self.clipboard_cut = cut;
@@ -63,12 +98,13 @@ impl App {
             return;
         }
         let items = self.clipboard.clone();
+        let dest = self.pane().current_path.clone();
         let mut errors = Vec::new();
         for src in &items {
             let result = if self.clipboard_cut {
-                fs_ops::move_into(src, &self.pane.current_path)
+                fs_ops::move_into(src, &dest)
             } else {
-                fs_ops::copy_into(src, &self.pane.current_path)
+                fs_ops::copy_into(src, &dest)
             };
             if let Err(e) = result {
                 errors.push(format!("{} : {e}", src.display()));
@@ -78,7 +114,7 @@ impl App {
             self.clipboard.clear();
             self.clipboard_cut = false;
         }
-        self.pane.reload();
+        self.reload_panes();
         self.status = if errors.is_empty() {
             Some(format!("{} élément(s) collé(s)", items.len()))
         } else {
@@ -88,16 +124,19 @@ impl App {
 
     fn apply_action(&mut self, action: UiAction) {
         match action {
+            UiAction::FocusPane(idx) => {
+                self.active_pane = idx.min(self.panes.len().saturating_sub(1));
+            }
             UiAction::Navigate(path) => self.navigate_to(path),
             UiAction::OpenFile(path) => {
                 if let Err(e) = fs_ops::open_with_default_app(&path) {
                     self.status = Some(format!("Ouverture impossible : {e}"));
                 }
             }
-            UiAction::Select { path, ctrl, shift } => self.pane.select(path, ctrl, shift),
+            UiAction::Select { path, ctrl, shift } => self.pane_mut().select(path, ctrl, shift),
             UiAction::ContextSelect(path) => {
-                if !self.pane.selection.contains(&path) {
-                    self.pane.set_selection_to(path);
+                if !self.pane().selection.contains(&path) {
+                    self.pane_mut().set_selection_to(path);
                 }
             }
             UiAction::StartRename(path) => {
@@ -108,26 +147,26 @@ impl App {
                 self.dialog = Some(Dialog::Rename { target: path, name });
             }
             UiAction::AskDeleteSelection => {
-                let targets = self.pane.selected_in_order();
+                let targets = self.pane().selected_in_order();
                 if !targets.is_empty() {
                     self.dialog = Some(Dialog::ConfirmDelete { targets });
                 }
             }
             UiAction::CopySelection { cut } => self.copy_selection(cut),
             UiAction::Paste => self.paste(),
-            UiAction::SortBy(column) => self.pane.set_sort(column),
+            UiAction::SortBy(column) => self.pane_mut().set_sort(column),
             UiAction::RunRecursiveSearch => {
-                if let Some(status) = self.pane.run_recursive_search() {
+                if let Some(status) = self.pane_mut().run_recursive_search() {
                     self.status = Some(status);
                 }
             }
             UiAction::OpenTerminal => {
-                if let Err(e) = fs_ops::open_terminal_here(&self.pane.current_path) {
+                if let Err(e) = fs_ops::open_terminal_here(&self.pane().current_path) {
                     self.status = Some(format!("Terminal impossible : {e}"));
                 }
             }
             UiAction::OpenVsCode => {
-                if let Err(e) = fs_ops::open_in_vscode(&self.pane.current_path) {
+                if let Err(e) = fs_ops::open_in_vscode(&self.pane().current_path) {
                     self.status = Some(format!("VS Code impossible : {e}"));
                 }
             }
@@ -141,9 +180,9 @@ impl App {
                 if name.is_empty() {
                     return;
                 }
-                match fs_ops::create_dir(&self.pane.current_path, name) {
+                match fs_ops::create_dir(&self.pane().current_path, name) {
                     Ok(_) => {
-                        self.pane.reload();
+                        self.reload_panes();
                         self.status = Some(format!("Dossier « {name} » créé"));
                     }
                     Err(e) => self.status = Some(format!("Création impossible : {e}")),
@@ -156,9 +195,10 @@ impl App {
                 }
                 match fs_ops::rename_entry(&target, name) {
                     Ok(new_path) => {
-                        self.pane.selection.remove(&target);
-                        self.pane.set_selection_to(new_path);
-                        self.pane.reload();
+                        let pane = self.pane_mut();
+                        pane.selection.remove(&target);
+                        pane.set_selection_to(new_path);
+                        self.reload_panes();
                     }
                     Err(e) => self.status = Some(format!("Renommage impossible : {e}")),
                 }
@@ -171,7 +211,7 @@ impl App {
                     }
                     Err(e) => self.status = Some(format!("Suppression impossible : {e}")),
                 }
-                self.pane.reload();
+                self.reload_panes();
             }
         }
     }
@@ -189,7 +229,7 @@ impl App {
             painter.text(
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
-                format!("Déposer pour copier dans {}", self.pane.current_path.display()),
+                format!("Déposer pour copier dans {}", self.pane().current_path.display()),
                 egui::FontId::proportional(18.0),
                 egui::Color32::WHITE,
             );
@@ -205,13 +245,14 @@ impl App {
         if dropped.is_empty() {
             return;
         }
+        let dest = self.pane().current_path.clone();
         let mut errors = Vec::new();
         for src in &dropped {
-            if let Err(e) = fs_ops::copy_into(src, &self.pane.current_path) {
+            if let Err(e) = fs_ops::copy_into(src, &dest) {
                 errors.push(format!("{} : {e}", src.display()));
             }
         }
-        self.pane.reload();
+        self.reload_panes();
         self.status = if errors.is_empty() {
             Some(format!("{} élément(s) copié(s)", dropped.len()))
         } else {
@@ -226,10 +267,10 @@ impl App {
         use egui::{Key, KeyboardShortcut, Modifiers};
         let ctrl = Modifiers::CTRL;
         if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::A))) {
-            self.pane.select_all();
+            self.pane_mut().select_all();
         }
         if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::L))) {
-            self.pane.open_address_bar();
+            self.pane_mut().open_address_bar();
         }
         if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::C))) {
             actions.push(UiAction::CopySelection { cut: false });
@@ -244,7 +285,7 @@ impl App {
             actions.push(UiAction::AskDeleteSelection);
         }
         if ui.input(|i| i.key_pressed(Key::F2)) {
-            if let [single] = self.pane.selected_in_order().as_slice() {
+            if let [single] = self.pane().selected_in_order().as_slice() {
                 actions.push(UiAction::StartRename(single.clone()));
             }
         }
@@ -253,9 +294,11 @@ impl App {
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        self.pane.poll_load();
-        if self.pane.is_loading() {
-            // Repeindre régulièrement tant que le thread de chargement travaille,
+        for pane in &mut self.panes {
+            pane.poll_load();
+        }
+        if self.panes.iter().any(Pane::is_loading) {
+            // Repeindre régulièrement tant qu'un thread de chargement travaille,
             // sinon le résultat n'est intégré qu'à la prochaine interaction.
             ui.ctx()
                 .request_repaint_after(std::time::Duration::from_millis(50));

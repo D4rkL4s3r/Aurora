@@ -10,6 +10,8 @@ pub(crate) enum Dialog {
 
 /// Événements émis par le rendu, appliqués à l'état en fin de frame.
 pub(crate) enum UiAction {
+    /// Rend actif le volet cliqué (vue divisée).
+    FocusPane(usize),
     Navigate(PathBuf),
     OpenFile(PathBuf),
     Select { path: PathBuf, ctrl: bool, shift: bool },

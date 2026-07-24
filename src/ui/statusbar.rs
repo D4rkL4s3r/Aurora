@@ -6,11 +6,11 @@ pub(crate) fn show(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
         egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(10, 6));
     egui::Panel::bottom("statusbar").frame(frame).show(ui, |ui| {
         ui.horizontal(|ui| {
-            let selected = app.pane.selection.len();
+            let selected = app.pane().selection.len();
             let summary = if selected > 0 {
                 format!("{selected} élément(s) sélectionné(s)")
             } else {
-                format!("{} élément(s)", app.pane.displayed_count())
+                format!("{} élément(s)", app.pane().displayed_count())
             };
             ui.label(egui::RichText::new(summary).small().weak());
             if let Some(status) = &app.status {

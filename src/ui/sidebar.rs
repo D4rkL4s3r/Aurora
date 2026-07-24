@@ -16,7 +16,7 @@ pub(crate) fn show(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
         ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
             section_header(ui, "ACCÈS RAPIDE");
             for quick_access in &app.quick_access {
-                let is_current = app.pane.current_path.starts_with(&quick_access.path);
+                let is_current = app.pane().current_path.starts_with(&quick_access.path);
                 let icon = quick_access_icon(quick_access.name);
                 let label = format!("{icon} {}", quick_access.name);
                 if ui.selectable_label(is_current, label).clicked() {
@@ -27,7 +27,7 @@ pub(crate) fn show(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
             ui.add_space(10.0);
             section_header(ui, "LECTEURS");
             for drive in &app.drives {
-                let is_current = app.pane.current_path.starts_with(drive);
+                let is_current = app.pane().current_path.starts_with(drive);
                 let label = drive.display().to_string();
                 if ui.selectable_label(is_current, format!("💾 {label}")).clicked() {
                     actions.push(UiAction::Navigate(drive.clone()));

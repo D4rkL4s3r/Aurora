@@ -1,14 +1,48 @@
 use crate::actions::UiAction;
 use crate::app::App;
 use crate::fs_ops::FileEntry;
-use crate::pane::SortColumn;
+use crate::pane::{Pane, SortColumn};
 use crate::ui::format::{entry_icon, entry_tile_color, format_date, format_size, type_label};
 use crate::ui::theme;
 
 pub(crate) fn show(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
     egui::CentralPanel::default_margins().show(ui, |ui| {
-        show_content(app, ui, actions);
+        if app.is_split() {
+            ui.columns(app.panes.len(), |cols| {
+                for (idx, col) in cols.iter_mut().enumerate() {
+                    pane_frame(app, idx, col, actions);
+                }
+            });
+        } else {
+            show_content(app, 0, ui, actions);
+        }
     });
+}
+
+/// Un volet de la vue divisée : cadre (accentué pour le volet actif),
+/// clic n'importe où dedans → devient le volet actif.
+fn pane_frame(app: &App, idx: usize, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
+    let active = idx == app.active_pane;
+    let stroke = if active {
+        egui::Stroke::new(1.5, theme::ACCENT.gamma_multiply(0.7))
+    } else {
+        ui.visuals().widgets.noninteractive.bg_stroke
+    };
+    egui::Frame::default()
+        .stroke(stroke)
+        .corner_radius(6.0)
+        .inner_margin(6.0)
+        .show(ui, |ui| {
+            // Poussé avant les actions des entrées : le changement de volet actif
+            // s'applique donc avant la sélection issue du même clic.
+            if !active
+                && ui.rect_contains_pointer(ui.max_rect())
+                && ui.input(|i| i.pointer.any_pressed())
+            {
+                actions.push(UiAction::FocusPane(idx));
+            }
+            ui.push_id(idx, |ui| show_content(app, idx, ui, actions));
+        });
 }
 
 fn elide(name: &str, max_chars: usize) -> String {
@@ -70,13 +104,19 @@ fn entry_interactions(entry: &FileEntry, response: &egui::Response, actions: &mu
     entry_context_menu(entry, response, actions);
 }
 
-fn grid_card(app: &App, entry: &FileEntry, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
+fn grid_card(
+    app: &App,
+    pane: &Pane,
+    entry: &FileEntry,
+    ui: &mut egui::Ui,
+    actions: &mut Vec<UiAction>,
+) {
     const CARD: egui::Vec2 = egui::Vec2::new(104.0, 118.0);
     let (rect, response) = ui.allocate_exact_size(CARD, egui::Sense::click());
 
     if ui.is_rect_visible(rect) {
         let visuals = ui.visuals();
-        let selected = app.pane.selection.contains(&entry.path);
+        let selected = pane.selection.contains(&entry.path);
         let is_cut = app.clipboard_cut && app.clipboard.contains(&entry.path);
         let painter = ui.painter();
 
@@ -138,6 +178,7 @@ fn grid_card(app: &App, entry: &FileEntry, ui: &mut egui::Ui, actions: &mut Vec<
 
 fn show_grid(
     app: &App,
+    pane: &Pane,
     ui: &mut egui::Ui,
     base: &[FileEntry],
     displayed_idx: &[usize],
@@ -149,14 +190,14 @@ fn show_grid(
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = egui::Vec2::new(10.0, 10.0);
                 for &i in displayed_idx {
-                    grid_card(app, &base[i], ui, actions);
+                    grid_card(app, pane, &base[i], ui, actions);
                 }
             });
         });
 }
 
-fn show_content(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
-    let pane = &app.pane;
+fn show_content(app: &App, pane_idx: usize, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
+    let pane = &app.panes[pane_idx];
 
     if pane.is_loading() {
         ui.centered_and_justified(|ui| {
@@ -189,7 +230,7 @@ fn show_content(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
     };
 
     if app.grid_view {
-        show_grid(app, ui, base, &displayed_idx, actions);
+        show_grid(app, pane, ui, base, &displayed_idx, actions);
         return;
     }
 
