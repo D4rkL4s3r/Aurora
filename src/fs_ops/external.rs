@@ -66,6 +66,62 @@ pub fn open_in_vscode(dir: &Path) -> io::Result<()> {
         .map(|_| ())
 }
 
+/// Application externe configurée par l'utilisateur (9.3).
+#[derive(Clone, Default)]
+pub struct ExternalApp {
+    pub name: String,
+    pub command: String,
+}
+
+fn external_apps_path() -> Option<PathBuf> {
+    crate::fs_ops::config_dir().map(|dir| dir.join("external_apps.conf"))
+}
+
+/// Charge la liste (`nom=chemin_exe`, une ligne par application).
+pub fn load_external_apps() -> Vec<ExternalApp> {
+    let Some(path) = external_apps_path() else {
+        return Vec::new();
+    };
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    content
+        .lines()
+        .filter_map(|line| {
+            let (name, command) = line.split_once('=')?;
+            let (name, command) = (name.trim(), command.trim());
+            (!name.is_empty() && !command.is_empty()).then(|| ExternalApp {
+                name: name.to_owned(),
+                command: command.to_owned(),
+            })
+        })
+        .collect()
+}
+
+pub fn save_external_apps(apps: &[ExternalApp]) {
+    let Some(path) = external_apps_path() else {
+        return;
+    };
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let content: String = apps
+        .iter()
+        .map(|a| format!("{}={}\n", a.name.trim(), a.command.trim()))
+        .collect();
+    let _ = std::fs::write(path, content);
+}
+
+/// Lance une application configurée avec le dossier courant en argument
+/// (et comme répertoire de travail).
+pub fn launch_external(app: &ExternalApp, dir: &Path) -> io::Result<()> {
+    Command::new(&app.command)
+        .arg(dir)
+        .current_dir(dir)
+        .spawn()
+        .map(|_| ())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

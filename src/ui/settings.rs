@@ -71,6 +71,54 @@ pub(crate) fn show(app: &mut App, ctx: &egui::Context) {
                 app.shortcuts.save();
             }
 
+            ui.add_space(10.0);
+            ui.separator();
+            ui.add_space(6.0);
+            ui.label(egui::RichText::new("Applications externes").strong());
+            ui.label(
+                egui::RichText::new(
+                    "Boutons ajoutés à la barre de statut. Le dossier courant est passé \
+                     en argument à l'exécutable.",
+                )
+                .small()
+                .weak(),
+            );
+            ui.add_space(4.0);
+            let mut changed = false;
+            let mut remove: Option<usize> = None;
+            for (idx, external) in app.external_apps.iter_mut().enumerate() {
+                ui.horizontal(|ui| {
+                    changed |= ui
+                        .add(
+                            egui::TextEdit::singleline(&mut external.name)
+                                .desired_width(90.0)
+                                .hint_text("Nom"),
+                        )
+                        .changed();
+                    changed |= ui
+                        .add(
+                            egui::TextEdit::singleline(&mut external.command)
+                                .desired_width(230.0)
+                                .hint_text("Chemin de l'exécutable"),
+                        )
+                        .changed();
+                    if ui.small_button("✖").clicked() {
+                        remove = Some(idx);
+                    }
+                });
+            }
+            if let Some(idx) = remove {
+                app.external_apps.remove(idx);
+                changed = true;
+            }
+            if ui.button("+ Ajouter").clicked() {
+                app.external_apps.push(Default::default());
+                changed = true;
+            }
+            if changed {
+                crate::fs_ops::save_external_apps(&app.external_apps);
+            }
+
             if let Some(action) = listening {
                 let captured = ui.input(|i| {
                     i.events.iter().find_map(|e| match e {

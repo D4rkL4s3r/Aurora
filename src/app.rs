@@ -26,6 +26,8 @@ pub struct App {
     pub(crate) shortcuts: ShortcutMap,
     /// Fenêtre de configuration des raccourcis, si ouverte.
     pub(crate) shortcuts_editor: Option<ShortcutsEditor>,
+    /// Applications externes configurées (9.3).
+    pub(crate) external_apps: Vec<fs_ops::ExternalApp>,
 }
 
 impl Default for App {
@@ -45,6 +47,7 @@ impl Default for App {
             icons: std::cell::RefCell::new(ui::icons::IconCache::default()),
             shortcuts: ShortcutMap::load(),
             shortcuts_editor: None,
+            external_apps: fs_ops::load_external_apps(),
         }
     }
 }
@@ -207,6 +210,14 @@ impl App {
             UiAction::OpenVsCode => {
                 if let Err(e) = fs_ops::open_in_vscode(&self.pane().current_path) {
                     self.status = Some(format!("VS Code impossible : {e}"));
+                }
+            }
+            UiAction::OpenExternalApp(idx) => {
+                let Some(external) = self.external_apps.get(idx).cloned() else {
+                    return;
+                };
+                if let Err(e) = fs_ops::launch_external(&external, &self.pane().current_path) {
+                    self.status = Some(format!("{} impossible : {e}", external.name));
                 }
             }
         }

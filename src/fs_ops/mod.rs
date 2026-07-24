@@ -5,7 +5,10 @@ mod listing;
 mod operations;
 mod search;
 
-pub use external::{open_in_vscode, open_terminal_here};
+pub use external::{
+    ExternalApp, launch_external, load_external_apps, open_in_vscode, open_terminal_here,
+    save_external_apps,
+};
 pub use listing::{FileEntry, FileKind, QuickAccessEntry, list_dir, list_drives, list_quick_access};
 pub use operations::{
     copy_into, create_dir, delete_to_trash, move_into, open_with_default_app, rename_entry,

@@ -35,4 +35,6 @@ pub(crate) enum UiAction {
     },
     OpenTerminal,
     OpenVsCode,
+    /// Lance l'application externe configurée à cet index.
+    OpenExternalApp(usize),
 }
