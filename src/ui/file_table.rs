@@ -53,6 +53,9 @@ fn pane_frame(app: &App, idx: usize, ui: &mut egui::Ui, actions: &mut Vec<UiActi
 /// Cible de dépôt « fond du volet » : un glisser-déposer relâché sur le volet
 /// (hors d'un dossier précis) atterrit dans son dossier courant.
 fn background_drop(pane: &Pane, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
+    if pane.is_home() {
+        return; // pas de dossier cible sur l'écran d'accueil
+    }
     let response = ui.response();
     if response.dnd_hover_payload::<DragPayload>().is_some() {
         ui.painter().rect_stroke(
@@ -329,6 +332,10 @@ fn show_grid(
 fn show_content(app: &App, pane_idx: usize, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
     let pane = &app.tab().panes[pane_idx];
 
+    if pane.is_home() {
+        crate::ui::home::show(app, ui, actions);
+        return;
+    }
     if pane.is_loading() {
         ui.centered_and_justified(|ui| {
             ui.horizontal(|ui| {

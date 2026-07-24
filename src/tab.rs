@@ -15,6 +15,14 @@ impl Tab {
         }
     }
 
+    /// Onglet ouvert sur l'écran d'accueil.
+    pub(crate) fn home() -> Self {
+        Self {
+            panes: vec![Pane::home()],
+            active_pane: 0,
+        }
+    }
+
     pub(crate) fn pane(&self) -> &Pane {
         &self.panes[self.active_pane]
     }
@@ -40,6 +48,9 @@ impl Tab {
 
     /// Titre affiché dans la barre d'onglets : dossier courant du volet actif.
     pub(crate) fn title(&self) -> String {
+        if self.pane().is_home() {
+            return "Accueil".to_owned();
+        }
         let path = &self.pane().current_path;
         let name = path
             .file_name()

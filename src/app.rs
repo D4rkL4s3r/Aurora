@@ -35,7 +35,7 @@ pub struct App {
 impl Default for App {
     fn default() -> Self {
         Self {
-            tabs: vec![Tab::new(std::env::current_dir().unwrap_or_default())],
+            tabs: vec![Tab::home()],
             active_tab: 0,
             drives: fs_ops::list_drives(),
             quick_access: fs_ops::list_quick_access(),
@@ -81,8 +81,13 @@ impl App {
     }
 
     pub(crate) fn new_tab(&mut self) {
-        let path = self.pane().current_path.clone();
-        self.tabs.push(Tab::new(path));
+        let pane = self.pane();
+        let tab = if pane.is_home() {
+            Tab::home()
+        } else {
+            Tab::new(pane.current_path.clone())
+        };
+        self.tabs.push(tab);
         self.active_tab = self.tabs.len() - 1;
     }
 
@@ -137,7 +142,7 @@ impl App {
     }
 
     fn paste(&mut self) {
-        if self.clipboard.is_empty() {
+        if self.clipboard.is_empty() || self.pane().is_home() {
             return;
         }
         let items = self.clipboard.clone();
@@ -340,6 +345,9 @@ impl App {
     /// Glisser-déposer natif : fichiers déposés depuis l'Explorateur Windows
     /// → copie dans le dossier courant, avec un voile indicatif pendant le survol.
     fn handle_file_drops(&mut self, ctx: &egui::Context) {
+        if self.pane().is_home() {
+            return; // pas de dossier de destination sur l'écran d'accueil
+        }
         if ctx.input(|i| !i.raw.hovered_files.is_empty()) {
             let painter = ctx.layer_painter(egui::LayerId::new(
                 egui::Order::Foreground,

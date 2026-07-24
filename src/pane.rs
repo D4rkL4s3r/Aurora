@@ -119,8 +119,24 @@ pub(crate) struct Pane {
 }
 
 impl Pane {
+    /// Volet « accueil » : aucun dossier chargé, l'écran d'accueil propose
+    /// les emplacements de départ.
+    pub(crate) fn home() -> Self {
+        Self::with_path(PathBuf::new())
+    }
+
+    pub(crate) fn is_home(&self) -> bool {
+        self.current_path.as_os_str().is_empty()
+    }
+
     pub(crate) fn new(path: PathBuf) -> Self {
-        let mut pane = Self {
+        let mut pane = Self::with_path(path);
+        pane.reload();
+        pane
+    }
+
+    fn with_path(path: PathBuf) -> Self {
+        Self {
             current_path: path,
             entries: Vec::new(),
             history: Vec::new(),
@@ -137,9 +153,7 @@ impl Pane {
             filter_kind: None,
             filter_size: SizeFilter::All,
             filter_date: DateFilter::All,
-        };
-        pane.reload();
-        pane
+        }
     }
 
     fn sort_entries(entries: &mut [FileEntry], column: SortColumn, ascending: bool) {
@@ -165,6 +179,9 @@ impl Pane {
     /// Lance le chargement du dossier courant dans un thread de fond.
     /// Le résultat sera intégré par [`Self::poll_load`].
     pub(crate) fn reload(&mut self) {
+        if self.is_home() {
+            return; // rien à charger sur l'écran d'accueil
+        }
         let (tx, rx) = mpsc::channel();
         let path = self.current_path.clone();
         std::thread::spawn(move || {
@@ -380,7 +397,7 @@ impl Pane {
         const MAX_DEPTH: usize = 8;
         const MAX_RESULTS: usize = 300;
         let query = self.search_query.trim().to_owned();
-        if query.is_empty() {
+        if query.is_empty() || self.is_home() {
             return None;
         }
         let mut results =

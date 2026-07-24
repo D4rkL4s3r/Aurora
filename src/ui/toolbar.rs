@@ -70,14 +70,20 @@ pub(crate) fn show(app: &mut App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>
                     app.go_back();
                 }
             });
-            if ui.button("⬆").on_hover_text("Dossier parent").clicked() {
-                app.go_parent();
-            }
+            ui.add_enabled_ui(!app.pane().is_home(), |ui| {
+                if ui.button("⬆").on_hover_text("Dossier parent").clicked() {
+                    app.go_parent();
+                }
+            });
             ui.separator();
             if app.pane().address_edit.is_some() {
                 address_bar(app, ui, actions);
             } else {
-                breadcrumb(app.pane(), ui, actions);
+                if app.pane().is_home() {
+                    ui.label(egui::RichText::new("🏠 Accueil").strong());
+                } else {
+                    breadcrumb(app.pane(), ui, actions);
+                }
                 let hint = app
                     .shortcuts
                     .menu_label("Saisir un chemin", crate::shortcuts::ShortcutAction::AddressBar);
@@ -132,15 +138,17 @@ pub(crate) fn show(app: &mut App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>
                 {
                     app.grid_view = !app.grid_view;
                 }
-                let new_folder = egui::Button::new(
-                    egui::RichText::new("+ Dossier").color(egui::Color32::WHITE),
-                )
-                .fill(theme::accent().gamma_multiply(0.55));
-                if ui.add(new_folder).clicked() {
-                    app.dialog = Some(Dialog::NewFolder {
-                        name: String::new(),
-                    });
-                }
+                ui.add_enabled_ui(!app.pane().is_home(), |ui| {
+                    let new_folder = egui::Button::new(
+                        egui::RichText::new("+ Dossier").color(egui::Color32::WHITE),
+                    )
+                    .fill(theme::accent().gamma_multiply(0.55));
+                    if ui.add(new_folder).clicked() {
+                        app.dialog = Some(Dialog::NewFolder {
+                            name: String::new(),
+                        });
+                    }
+                });
                 if !app.pane().search_query.is_empty() && ui.button("✖").clicked() {
                     app.pane_mut().clear_search();
                     app.status = None;
