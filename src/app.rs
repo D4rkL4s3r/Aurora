@@ -176,6 +176,49 @@ impl App {
         }
     }
 
+    /// Glisser-déposer natif : fichiers déposés depuis l'Explorateur Windows
+    /// → copie dans le dossier courant, avec un voile indicatif pendant le survol.
+    fn handle_file_drops(&mut self, ctx: &egui::Context) {
+        if ctx.input(|i| !i.raw.hovered_files.is_empty()) {
+            let painter = ctx.layer_painter(egui::LayerId::new(
+                egui::Order::Foreground,
+                egui::Id::new("drop_overlay"),
+            ));
+            let rect = ctx.content_rect();
+            painter.rect_filled(rect, 0.0, egui::Color32::from_black_alpha(110));
+            painter.text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                format!("Déposer pour copier dans {}", self.pane.current_path.display()),
+                egui::FontId::proportional(18.0),
+                egui::Color32::WHITE,
+            );
+        }
+
+        let dropped: Vec<PathBuf> = ctx.input(|i| {
+            i.raw
+                .dropped_files
+                .iter()
+                .filter_map(|f| f.path.clone())
+                .collect()
+        });
+        if dropped.is_empty() {
+            return;
+        }
+        let mut errors = Vec::new();
+        for src in &dropped {
+            if let Err(e) = fs_ops::copy_into(src, &self.pane.current_path) {
+                errors.push(format!("{} : {e}", src.display()));
+            }
+        }
+        self.pane.reload();
+        self.status = if errors.is_empty() {
+            Some(format!("{} élément(s) copié(s)", dropped.len()))
+        } else {
+            Some(errors.join(" · "))
+        };
+    }
+
     fn handle_shortcuts(&mut self, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
         if self.dialog.is_some() || ui.ctx().egui_wants_keyboard_input() {
             return;
@@ -226,6 +269,7 @@ impl eframe::App for App {
         ui::file_table::show(self, ui, &mut actions);
 
         self.handle_shortcuts(ui, &mut actions);
+        self.handle_file_drops(ui.ctx());
 
         for action in actions {
             self.apply_action(action);
