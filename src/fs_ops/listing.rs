@@ -13,6 +13,77 @@ pub struct FileEntry {
     pub extension: Option<String>,
 }
 
+/// Catégorie d'un fichier pour les filtres rapides. Les listes d'extensions
+/// recoupent volontairement celles des icônes de `ui::format`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileKind {
+    Folder,
+    Image,
+    Video,
+    Audio,
+    Archive,
+    Code,
+    Executable,
+    Document,
+    Other,
+}
+
+impl FileKind {
+    /// Catégories proposées dans le filtre « Type ».
+    pub const FILTERABLE: [FileKind; 8] = [
+        Self::Folder,
+        Self::Image,
+        Self::Video,
+        Self::Audio,
+        Self::Archive,
+        Self::Code,
+        Self::Executable,
+        Self::Document,
+    ];
+
+    pub fn of(entry: &FileEntry) -> Self {
+        if entry.is_dir {
+            return Self::Folder;
+        }
+        let ext = entry.extension.as_deref().map(|e| e.to_lowercase());
+        match ext.as_deref() {
+            Some(
+                "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "svg" | "ico" | "tif" | "tiff",
+            ) => Self::Image,
+            Some("mp4" | "mkv" | "avi" | "mov" | "wmv" | "webm" | "flv" | "m4v") => Self::Video,
+            Some("mp3" | "wav" | "flac" | "ogg" | "m4a" | "aac" | "wma" | "opus") => Self::Audio,
+            Some("zip" | "rar" | "7z" | "tar" | "gz" | "bz2" | "xz" | "iso" | "cab") => {
+                Self::Archive
+            }
+            Some(
+                "rs" | "py" | "js" | "ts" | "tsx" | "jsx" | "c" | "cpp" | "h" | "hpp" | "java"
+                | "cs" | "go" | "rb" | "php" | "html" | "css" | "json" | "toml" | "yaml" | "yml"
+                | "xml" | "sh" | "ps1" | "bat" | "cmd" | "sql" | "md",
+            ) => Self::Code,
+            Some("exe" | "msi" | "lnk" | "dll") => Self::Executable,
+            Some(
+                "pdf" | "doc" | "docx" | "odt" | "txt" | "rtf" | "xls" | "xlsx" | "ods" | "csv"
+                | "ppt" | "pptx" | "odp",
+            ) => Self::Document,
+            _ => Self::Other,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Folder => "Dossiers",
+            Self::Image => "Images",
+            Self::Video => "Vidéos",
+            Self::Audio => "Audio",
+            Self::Archive => "Archives",
+            Self::Code => "Code",
+            Self::Executable => "Programmes",
+            Self::Document => "Documents",
+            Self::Other => "Autres",
+        }
+    }
+}
+
 pub fn list_dir(path: &Path) -> io::Result<Vec<FileEntry>> {
     let mut entries = Vec::new();
 

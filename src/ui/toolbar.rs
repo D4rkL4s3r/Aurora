@@ -112,6 +112,17 @@ pub(crate) fn show(app: &mut App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>
                 {
                     app.toggle_split();
                 }
+                let filters_active = app.show_filters || app.pane().has_filters();
+                if ui
+                    .selectable_label(filters_active, "Filtres")
+                    .on_hover_text("Filtres rapides (type, taille, date)")
+                    .clicked()
+                {
+                    app.show_filters = !app.show_filters;
+                    if !app.show_filters {
+                        app.pane_mut().clear_filters();
+                    }
+                }
                 let view_icon = if app.grid_view { "☰" } else { "⊞" };
                 if ui
                     .button(view_icon)

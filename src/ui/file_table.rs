@@ -338,15 +338,7 @@ fn show_content(app: &App, pane_idx: usize, ui: &mut egui::Ui, actions: &mut Vec
     }
 
     let base = pane.displayed_base();
-    let displayed_idx: Vec<usize> = match pane.instant_filter() {
-        Some(query) => base
-            .iter()
-            .enumerate()
-            .filter(|(_, e)| e.name.to_lowercase().contains(&query))
-            .map(|(i, _)| i)
-            .collect(),
-        None => (0..base.len()).collect(),
-    };
+    let displayed_idx: Vec<usize> = pane.displayed_indices();
 
     if app.grid_view {
         show_grid(app, pane, ui, base, &displayed_idx, actions);

@@ -1,7 +1,88 @@
-use crate::fs_ops::{self, FileEntry};
+use crate::fs_ops::{self, FileEntry, FileKind};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
+use std::time::{Duration, SystemTime};
+
+/// Filtre rapide sur la taille. Un filtre actif exclut les dossiers.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum SizeFilter {
+    #[default]
+    All,
+    Small,
+    Medium,
+    Large,
+}
+
+impl SizeFilter {
+    pub(crate) const VARIANTS: [SizeFilter; 4] =
+        [Self::All, Self::Small, Self::Medium, Self::Large];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::All => "Taille : toutes",
+            Self::Small => "< 1 Mo",
+            Self::Medium => "1 à 100 Mo",
+            Self::Large => "> 100 Mo",
+        }
+    }
+
+    fn matches(self, entry: &FileEntry) -> bool {
+        const MB: u64 = 1024 * 1024;
+        if entry.is_dir {
+            return self == Self::All;
+        }
+        match self {
+            Self::All => true,
+            Self::Small => entry.size < MB,
+            Self::Medium => (MB..100 * MB).contains(&entry.size),
+            Self::Large => entry.size >= 100 * MB,
+        }
+    }
+}
+
+/// Filtre rapide sur la date de modification.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum DateFilter {
+    #[default]
+    All,
+    Day,
+    Week,
+    Month,
+    Year,
+}
+
+impl DateFilter {
+    pub(crate) const VARIANTS: [DateFilter; 5] =
+        [Self::All, Self::Day, Self::Week, Self::Month, Self::Year];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::All => "Date : toutes",
+            Self::Day => "Dernières 24 h",
+            Self::Week => "7 derniers jours",
+            Self::Month => "30 derniers jours",
+            Self::Year => "12 derniers mois",
+        }
+    }
+
+    fn matches(self, entry: &FileEntry) -> bool {
+        let days = match self {
+            Self::All => return true,
+            Self::Day => 1,
+            Self::Week => 7,
+            Self::Month => 30,
+            Self::Year => 365,
+        };
+        let Some(modified) = entry.modified else {
+            return false;
+        };
+        SystemTime::now()
+            .duration_since(modified)
+            .map(|age| age <= Duration::from_secs(days * 24 * 3600))
+            .unwrap_or(true) // date dans le futur : on ne cache pas
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SortColumn {
@@ -32,6 +113,9 @@ pub(crate) struct Pane {
     pub(crate) address_edit: Option<String>,
     /// Donne le focus au champ d'adresse à la prochaine frame.
     pub(crate) address_focus: bool,
+    pub(crate) filter_kind: Option<FileKind>,
+    pub(crate) filter_size: SizeFilter,
+    pub(crate) filter_date: DateFilter,
 }
 
 impl Pane {
@@ -50,6 +134,9 @@ impl Pane {
             load_error: None,
             address_edit: None,
             address_focus: false,
+            filter_kind: None,
+            filter_size: SizeFilter::All,
+            filter_date: DateFilter::All,
         };
         pane.reload();
         pane
@@ -135,6 +222,7 @@ impl Pane {
             self.selection.clear();
             self.selection_anchor = None;
             self.clear_search();
+            self.clear_filters();
             self.reload();
         }
     }
@@ -153,6 +241,7 @@ impl Pane {
             self.selection.clear();
             self.selection_anchor = None;
             self.clear_search();
+            self.clear_filters();
             self.reload();
         }
     }
@@ -165,6 +254,18 @@ impl Pane {
     pub(crate) fn clear_search(&mut self) {
         self.search_query.clear();
         self.search_results = None;
+    }
+
+    pub(crate) fn has_filters(&self) -> bool {
+        self.filter_kind.is_some()
+            || self.filter_size != SizeFilter::All
+            || self.filter_date != DateFilter::All
+    }
+
+    pub(crate) fn clear_filters(&mut self) {
+        self.filter_kind = None;
+        self.filter_size = SizeFilter::All;
+        self.filter_date = DateFilter::All;
     }
 
     /// Liste actuellement affichée : résultats de recherche récursive,
@@ -181,28 +282,36 @@ impl Pane {
         (self.search_results.is_none() && !query.is_empty()).then(|| query.to_lowercase())
     }
 
+    /// Vrai si l'entrée passe la recherche instantanée et les filtres rapides.
+    fn passes_filters(&self, entry: &FileEntry, query: Option<&str>) -> bool {
+        query.is_none_or(|q| entry.name.to_lowercase().contains(q))
+            && self.filter_kind.is_none_or(|k| FileKind::of(entry) == k)
+            && self.filter_size.matches(entry)
+            && self.filter_date.matches(entry)
+    }
+
+    /// Indices (dans [`Self::displayed_base`]) des entrées affichées.
+    pub(crate) fn displayed_indices(&self) -> Vec<usize> {
+        let query = self.instant_filter();
+        self.displayed_base()
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| self.passes_filters(e, query.as_deref()))
+            .map(|(i, _)| i)
+            .collect()
+    }
+
     /// Chemins affichés, dans l'ordre d'affichage.
     pub(crate) fn displayed_paths(&self) -> Vec<PathBuf> {
         let base = self.displayed_base();
-        match self.instant_filter() {
-            Some(query) => base
-                .iter()
-                .filter(|e| e.name.to_lowercase().contains(&query))
-                .map(|e| e.path.clone())
-                .collect(),
-            None => base.iter().map(|e| e.path.clone()).collect(),
-        }
+        self.displayed_indices()
+            .into_iter()
+            .map(|i| base[i].path.clone())
+            .collect()
     }
 
     pub(crate) fn displayed_count(&self) -> usize {
-        match self.instant_filter() {
-            Some(query) => self
-                .displayed_base()
-                .iter()
-                .filter(|e| e.name.to_lowercase().contains(&query))
-                .count(),
-            None => self.displayed_base().len(),
-        }
+        self.displayed_indices().len()
     }
 
     /// Chemins sélectionnés, dans l'ordre d'affichage.

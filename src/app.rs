@@ -19,6 +19,8 @@ pub struct App {
     pub(crate) status: Option<String>,
     pub(crate) dark_theme: bool,
     pub(crate) grid_view: bool,
+    /// Bandeau des filtres rapides visible.
+    pub(crate) show_filters: bool,
     /// RefCell : le rendu (en `&App`) alimente le cache d'icônes au fil des frames.
     pub(crate) icons: std::cell::RefCell<ui::icons::IconCache>,
     pub(crate) shortcuts: ShortcutMap,
@@ -39,6 +41,7 @@ impl Default for App {
             status: None,
             dark_theme: true,
             grid_view: true,
+            show_filters: false,
             icons: std::cell::RefCell::new(ui::icons::IconCache::default()),
             shortcuts: ShortcutMap::load(),
             shortcuts_editor: None,
@@ -427,6 +430,7 @@ impl eframe::App for App {
 
         ui::tabs::show(self, ui);
         ui::toolbar::show(self, ui, &mut actions);
+        ui::filters::show(self, ui);
         ui::statusbar::show(self, ui, &mut actions);
         ui::sidebar::show(self, ui, &mut actions);
         ui::file_table::show(self, ui, &mut actions);
