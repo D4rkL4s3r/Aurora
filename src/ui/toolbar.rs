@@ -99,7 +99,7 @@ pub(crate) fn show(app: &mut App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>
                         egui::ThemePreference::Light
                     });
                 }
-                if ui.button("⚙").on_hover_text("Raccourcis clavier").clicked() {
+                if ui.button("⚙").on_hover_text("Paramètres").clicked() {
                     app.shortcuts_editor = Some(Default::default());
                 }
                 let split_hint = app
@@ -123,7 +123,7 @@ pub(crate) fn show(app: &mut App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>
                 let new_folder = egui::Button::new(
                     egui::RichText::new("+ Dossier").color(egui::Color32::WHITE),
                 )
-                .fill(theme::ACCENT.gamma_multiply(0.55));
+                .fill(theme::accent().gamma_multiply(0.55));
                 if ui.add(new_folder).clicked() {
                     app.dialog = Some(Dialog::NewFolder {
                         name: String::new(),

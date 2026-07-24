@@ -187,7 +187,7 @@ impl ShortcutMap {
 }
 
 fn config_path() -> Option<PathBuf> {
-    std::env::var_os("APPDATA").map(|dir| PathBuf::from(dir).join("aurora").join("shortcuts.conf"))
+    crate::fs_ops::config_dir().map(|dir| dir.join("shortcuts.conf"))
 }
 
 pub(crate) fn format_shortcut(shortcut: &KeyboardShortcut) -> String {

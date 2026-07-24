@@ -12,6 +12,11 @@ pub use operations::{
 };
 pub use search::search_recursive;
 
+/// Dossier de configuration de l'application (`%APPDATA%\aurora`).
+pub fn config_dir() -> Option<std::path::PathBuf> {
+    std::env::var_os("APPDATA").map(|dir| std::path::PathBuf::from(dir).join("aurora"))
+}
+
 #[cfg(test)]
 pub(crate) fn temp_sandbox(test_name: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!(

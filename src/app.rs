@@ -316,7 +316,7 @@ impl App {
             pos + egui::vec2(14.0, 10.0),
             galley.size() + egui::vec2(12.0, 8.0),
         );
-        painter.rect_filled(rect, 6.0, crate::ui::theme::ACCENT.gamma_multiply(0.85));
+        painter.rect_filled(rect, 6.0, crate::ui::theme::accent().gamma_multiply(0.85));
         painter.galley(rect.min + egui::vec2(6.0, 4.0), galley, egui::Color32::WHITE);
     }
 

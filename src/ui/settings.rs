@@ -1,19 +1,36 @@
-//! Fenêtre de configuration des raccourcis clavier (bouton ⚙) :
-//! cliquer sur un raccourci puis appuyer sur la nouvelle combinaison.
+//! Fenêtre de paramètres (bouton ⚙) : couleur d'accent et raccourcis
+//! clavier (cliquer sur un raccourci puis appuyer sur la nouvelle combinaison).
 
 use crate::app::App;
 use crate::shortcuts::{ShortcutAction, ShortcutsEditor};
+use crate::ui::theme;
 
 pub(crate) fn show(app: &mut App, ctx: &egui::Context) {
     if app.shortcuts_editor.is_none() {
         return;
     }
     let mut open = true;
-    egui::Window::new("Raccourcis clavier")
+    egui::Window::new("Paramètres")
         .open(&mut open)
         .collapsible(false)
         .resizable(false)
         .show(ctx, |ui| {
+            ui.label(egui::RichText::new("Couleur d'accent").strong());
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                let mut color = theme::accent();
+                if ui.color_edit_button_srgba(&mut color).changed() {
+                    theme::set_accent(ui.ctx(), color);
+                }
+                if ui.button("Par défaut").clicked() {
+                    theme::set_accent(ui.ctx(), theme::DEFAULT_ACCENT);
+                }
+            });
+
+            ui.add_space(10.0);
+            ui.separator();
+            ui.add_space(6.0);
+            ui.label(egui::RichText::new("Raccourcis clavier").strong());
             ui.label(
                 egui::RichText::new(
                     "Cliquez sur un raccourci puis appuyez sur la nouvelle combinaison. \

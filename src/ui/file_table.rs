@@ -28,7 +28,7 @@ pub(crate) fn show(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
 fn pane_frame(app: &App, idx: usize, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
     let active = idx == app.tab().active_pane;
     let stroke = if active {
-        egui::Stroke::new(1.5, theme::ACCENT.gamma_multiply(0.7))
+        egui::Stroke::new(1.5, theme::accent().gamma_multiply(0.7))
     } else {
         ui.visuals().widgets.noninteractive.bg_stroke
     };
@@ -58,7 +58,7 @@ fn background_drop(pane: &Pane, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) 
         ui.painter().rect_stroke(
             ui.max_rect(),
             6.0,
-            egui::Stroke::new(1.5, theme::ACCENT.gamma_multiply(0.6)),
+            egui::Stroke::new(1.5, theme::accent().gamma_multiply(0.6)),
             egui::StrokeKind::Inside,
         );
     }
@@ -162,7 +162,7 @@ fn entry_drag_and_drop(
     painter.rect_stroke(
         response.rect,
         6.0,
-        egui::Stroke::new(1.5, theme::ACCENT),
+        egui::Stroke::new(1.5, theme::accent()),
         egui::StrokeKind::Inside,
     );
     if response.dnd_release_payload::<DragPayload>().is_some() {
@@ -226,7 +226,7 @@ fn grid_card(
             painter.rect_stroke(
                 rect,
                 8.0,
-                egui::Stroke::new(1.5, theme::ACCENT),
+                egui::Stroke::new(1.5, theme::accent()),
                 egui::StrokeKind::Inside,
             );
         } else if response.hovered() {
