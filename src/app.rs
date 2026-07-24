@@ -1,4 +1,4 @@
-use crate::actions::{Dialog, UiAction};
+use crate::actions::{Dialog, DragPayload, UiAction};
 use crate::fs_ops::{self, QuickAccessEntry};
 use crate::pane::Pane;
 use crate::ui;
@@ -155,6 +155,7 @@ impl App {
             UiAction::CopySelection { cut } => self.copy_selection(cut),
             UiAction::Paste => self.paste(),
             UiAction::SortBy(column) => self.pane_mut().set_sort(column),
+            UiAction::DropPaths { paths, dest, copy } => self.drop_paths(paths, dest, copy),
             UiAction::RunRecursiveSearch => {
                 if let Some(status) = self.pane_mut().run_recursive_search() {
                     self.status = Some(status);
@@ -214,6 +215,74 @@ impl App {
                 self.reload_panes();
             }
         }
+    }
+
+    /// Applique un glisser-déposer interne : déplace (ou copie avec Ctrl)
+    /// les chemins traînés dans `dest`.
+    fn drop_paths(&mut self, paths: Vec<PathBuf>, dest: PathBuf, copy: bool) {
+        let paths: Vec<PathBuf> = if copy {
+            paths
+        } else {
+            // Déplacer un élément là où il est déjà est un non-événement.
+            paths
+                .into_iter()
+                .filter(|p| p.parent() != Some(dest.as_path()))
+                .collect()
+        };
+        if paths.is_empty() {
+            return;
+        }
+        let mut errors = Vec::new();
+        for src in &paths {
+            let result = if copy {
+                fs_ops::copy_into(src, &dest)
+            } else {
+                fs_ops::move_into(src, &dest)
+            };
+            if let Err(e) = result {
+                errors.push(format!("{} : {e}", src.display()));
+            }
+        }
+        self.reload_panes();
+        self.status = if errors.is_empty() {
+            let verb = if copy { "copié(s)" } else { "déplacé(s)" };
+            Some(format!(
+                "{} élément(s) {verb} vers {}",
+                paths.len(),
+                dest.display()
+            ))
+        } else {
+            Some(errors.join(" · "))
+        };
+    }
+
+    /// Étiquette qui suit le curseur pendant un glisser-déposer interne.
+    fn draw_drag_ghost(&self, ctx: &egui::Context) {
+        let Some(payload) = egui::DragAndDrop::payload::<DragPayload>(ctx) else {
+            return;
+        };
+        ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
+        let Some(pos) = ctx.pointer_latest_pos() else {
+            return;
+        };
+        let copy = ctx.input(|i| i.modifiers.ctrl);
+        let verb = if copy { "copier" } else { "déplacer" };
+        let text = format!("{} élément(s) à {verb}", payload.paths.len());
+        let painter = ctx.layer_painter(egui::LayerId::new(
+            egui::Order::Tooltip,
+            egui::Id::new("drag_ghost"),
+        ));
+        let galley = painter.layout_no_wrap(
+            text,
+            egui::FontId::proportional(12.0),
+            egui::Color32::WHITE,
+        );
+        let rect = egui::Rect::from_min_size(
+            pos + egui::vec2(14.0, 10.0),
+            galley.size() + egui::vec2(12.0, 8.0),
+        );
+        painter.rect_filled(rect, 6.0, crate::ui::theme::ACCENT.gamma_multiply(0.85));
+        painter.galley(rect.min + egui::vec2(6.0, 4.0), galley, egui::Color32::WHITE);
     }
 
     /// Glisser-déposer natif : fichiers déposés depuis l'Explorateur Windows
@@ -313,6 +382,7 @@ impl eframe::App for App {
 
         self.handle_shortcuts(ui, &mut actions);
         self.handle_file_drops(ui.ctx());
+        self.draw_drag_ghost(ui.ctx());
 
         for action in actions {
             self.apply_action(action);

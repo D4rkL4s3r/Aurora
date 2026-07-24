@@ -1,6 +1,11 @@
 use crate::pane::SortColumn;
 use std::path::PathBuf;
 
+/// Contenu d'un glisser-déposer interne : les chemins de la sélection traînée.
+pub(crate) struct DragPayload {
+    pub(crate) paths: Vec<PathBuf>,
+}
+
 /// Dialogue modal en cours d'affichage.
 pub(crate) enum Dialog {
     NewFolder { name: String },
@@ -22,6 +27,12 @@ pub(crate) enum UiAction {
     Paste,
     SortBy(SortColumn),
     RunRecursiveSearch,
+    /// Dépôt d'un glisser-déposer interne dans le dossier `dest`.
+    DropPaths {
+        paths: Vec<PathBuf>,
+        dest: PathBuf,
+        copy: bool,
+    },
     OpenTerminal,
     OpenVsCode,
 }

@@ -1,4 +1,4 @@
-use crate::actions::UiAction;
+use crate::actions::{DragPayload, UiAction};
 use crate::app::App;
 use crate::fs_ops::FileEntry;
 use crate::pane::{Pane, SortColumn};
@@ -15,6 +15,7 @@ pub(crate) fn show(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
             });
         } else {
             show_content(app, 0, ui, actions);
+            background_drop(&app.panes[0], ui, actions);
         }
     });
 }
@@ -42,7 +43,31 @@ fn pane_frame(app: &App, idx: usize, ui: &mut egui::Ui, actions: &mut Vec<UiActi
                 actions.push(UiAction::FocusPane(idx));
             }
             ui.push_id(idx, |ui| show_content(app, idx, ui, actions));
+            background_drop(&app.panes[idx], ui, actions);
         });
+}
+
+/// Cible de dépôt « fond du volet » : un glisser-déposer relâché sur le volet
+/// (hors d'un dossier précis) atterrit dans son dossier courant.
+fn background_drop(pane: &Pane, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
+    let response = ui.response();
+    if response.dnd_hover_payload::<DragPayload>().is_some() {
+        ui.painter().rect_stroke(
+            ui.max_rect(),
+            6.0,
+            egui::Stroke::new(1.5, theme::ACCENT.gamma_multiply(0.6)),
+            egui::StrokeKind::Inside,
+        );
+    }
+    if let Some(payload) = response.dnd_release_payload::<DragPayload>() {
+        let copy = ui.input(|i| i.modifiers.ctrl);
+        actions.push(UiAction::DropPaths {
+            paths: payload.paths.clone(),
+            dest: pane.current_path.clone(),
+            copy,
+        });
+        egui::DragAndDrop::clear_payload(ui.ctx());
+    }
 }
 
 fn elide(name: &str, max_chars: usize) -> String {
@@ -82,7 +107,60 @@ fn entry_context_menu(entry: &FileEntry, response: &egui::Response, actions: &mu
     });
 }
 
-fn entry_interactions(entry: &FileEntry, response: &egui::Response, actions: &mut Vec<UiAction>) {
+/// Gère un glisser-déposer sur cette entrée : départ de drag (la sélection
+/// suit l'entrée traînée) et, pour un dossier, cible de dépôt.
+fn entry_drag_and_drop(
+    pane: &Pane,
+    entry: &FileEntry,
+    response: &egui::Response,
+    actions: &mut Vec<UiAction>,
+) {
+    if response.drag_started() {
+        let paths = if pane.selection.contains(&entry.path) {
+            pane.selected_in_order()
+        } else {
+            actions.push(UiAction::ContextSelect(entry.path.clone()));
+            vec![entry.path.clone()]
+        };
+        egui::DragAndDrop::set_payload(&response.ctx, DragPayload { paths });
+    }
+    if !entry.is_dir {
+        return;
+    }
+    let Some(payload) = response.dnd_hover_payload::<DragPayload>() else {
+        return;
+    };
+    if payload.paths.contains(&entry.path) {
+        return; // on ne dépose pas un dossier sur lui-même
+    }
+    let painter = response.ctx.layer_painter(egui::LayerId::new(
+        egui::Order::Foreground,
+        egui::Id::new("dnd_target"),
+    ));
+    painter.rect_stroke(
+        response.rect,
+        6.0,
+        egui::Stroke::new(1.5, theme::ACCENT),
+        egui::StrokeKind::Inside,
+    );
+    if response.dnd_release_payload::<DragPayload>().is_some() {
+        let copy = response.ctx.input(|i| i.modifiers.ctrl);
+        actions.push(UiAction::DropPaths {
+            paths: payload.paths.clone(),
+            dest: entry.path.clone(),
+            copy,
+        });
+        egui::DragAndDrop::clear_payload(&response.ctx);
+    }
+}
+
+fn entry_interactions(
+    pane: &Pane,
+    entry: &FileEntry,
+    response: &egui::Response,
+    actions: &mut Vec<UiAction>,
+) {
+    entry_drag_and_drop(pane, entry, response, actions);
     if response.clicked() {
         let modifiers = response.ctx.input(|i| i.modifiers);
         actions.push(UiAction::Select {
@@ -112,7 +190,7 @@ fn grid_card(
     actions: &mut Vec<UiAction>,
 ) {
     const CARD: egui::Vec2 = egui::Vec2::new(104.0, 118.0);
-    let (rect, response) = ui.allocate_exact_size(CARD, egui::Sense::click());
+    let (rect, response) = ui.allocate_exact_size(CARD, egui::Sense::click_and_drag());
 
     if ui.is_rect_visible(rect) {
         let visuals = ui.visuals();
@@ -173,7 +251,7 @@ fn grid_card(
         }
     }
 
-    entry_interactions(entry, &response, actions);
+    entry_interactions(pane, entry, &response, actions);
 }
 
 fn show_grid(
@@ -246,7 +324,7 @@ fn show_content(app: &App, pane_idx: usize, ui: &mut egui::Ui, actions: &mut Vec
     egui_extras::TableBuilder::new(ui)
         .striped(true)
         .resizable(true)
-        .sense(egui::Sense::click())
+        .sense(egui::Sense::click_and_drag())
         .column(egui_extras::Column::remainder().clip(true))
         .column(egui_extras::Column::auto())
         .column(egui_extras::Column::auto())
@@ -330,7 +408,7 @@ fn show_content(app: &App, pane_idx: usize, ui: &mut egui::Ui, actions: &mut Vec
                 });
 
                 let response = row.response();
-                entry_interactions(entry, &response, actions);
+                entry_interactions(pane, entry, &response, actions);
             });
         });
 }
