@@ -1,4 +1,5 @@
 use crate::app::App;
+use crate::shortcuts::ShortcutAction;
 
 /// Barre d'onglets au-dessus de la toolbar. Clic pour activer, clic molette
 /// ou ✖ pour fermer, ＋ pour ouvrir un nouvel onglet sur le dossier courant.
@@ -28,7 +29,10 @@ pub(crate) fn show(app: &mut App, ui: &mut egui::Ui) {
                     && selected
                     && ui
                         .small_button("✖")
-                        .on_hover_text("Fermer l'onglet")
+                        .on_hover_text(
+                            app.shortcuts
+                                .menu_label("Fermer l'onglet", ShortcutAction::CloseTab),
+                        )
                         .clicked()
                 {
                     close = Some(idx);
@@ -36,7 +40,7 @@ pub(crate) fn show(app: &mut App, ui: &mut egui::Ui) {
             }
             if ui
                 .button("＋")
-                .on_hover_text("Nouvel onglet")
+                .on_hover_text(app.shortcuts.menu_label("Nouvel onglet", ShortcutAction::NewTab))
                 .clicked()
             {
                 app.new_tab();

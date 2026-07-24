@@ -1,6 +1,7 @@
 use crate::actions::{Dialog, DragPayload, UiAction};
 use crate::fs_ops::{self, QuickAccessEntry};
 use crate::pane::Pane;
+use crate::shortcuts::{ShortcutAction, ShortcutMap, ShortcutsEditor};
 use crate::tab::Tab;
 use crate::ui;
 use std::path::PathBuf;
@@ -20,6 +21,9 @@ pub struct App {
     pub(crate) grid_view: bool,
     /// RefCell : le rendu (en `&App`) alimente le cache d'icônes au fil des frames.
     pub(crate) icons: std::cell::RefCell<ui::icons::IconCache>,
+    pub(crate) shortcuts: ShortcutMap,
+    /// Fenêtre de configuration des raccourcis, si ouverte.
+    pub(crate) shortcuts_editor: Option<ShortcutsEditor>,
 }
 
 impl Default for App {
@@ -36,6 +40,8 @@ impl Default for App {
             dark_theme: true,
             grid_view: true,
             icons: std::cell::RefCell::new(ui::icons::IconCache::default()),
+            shortcuts: ShortcutMap::load(),
+            shortcuts_editor: None,
         }
     }
 }
@@ -359,42 +365,41 @@ impl App {
     }
 
     fn handle_shortcuts(&mut self, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
-        if self.dialog.is_some() || ui.ctx().egui_wants_keyboard_input() {
+        if self.dialog.is_some()
+            || self.shortcuts_editor.is_some()
+            || ui.ctx().egui_wants_keyboard_input()
+        {
             return;
         }
-        use egui::{Key, KeyboardShortcut, Modifiers};
-        let ctrl = Modifiers::CTRL;
-        if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::A))) {
-            self.pane_mut().select_all();
-        }
-        if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::L))) {
-            self.pane_mut().open_address_bar();
-        }
-        if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::C))) {
-            actions.push(UiAction::CopySelection { cut: false });
-        }
-        if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::X))) {
-            actions.push(UiAction::CopySelection { cut: true });
-        }
-        if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::V))) {
-            actions.push(UiAction::Paste);
-        }
-        if ui.input(|i| i.key_pressed(Key::Delete)) {
-            actions.push(UiAction::AskDeleteSelection);
-        }
-        if ui.input(|i| i.key_pressed(Key::F2)) {
-            if let [single] = self.pane().selected_in_order().as_slice() {
-                actions.push(UiAction::StartRename(single.clone()));
+        let triggered: Vec<ShortcutAction> = ui.input_mut(|i| {
+            ShortcutAction::ALL
+                .iter()
+                .copied()
+                .filter(|a| {
+                    self.shortcuts
+                        .binding(*a)
+                        .is_some_and(|s| i.consume_shortcut(&s))
+                })
+                .collect()
+        });
+        for action in triggered {
+            match action {
+                ShortcutAction::SelectAll => self.pane_mut().select_all(),
+                ShortcutAction::Copy => actions.push(UiAction::CopySelection { cut: false }),
+                ShortcutAction::Cut => actions.push(UiAction::CopySelection { cut: true }),
+                ShortcutAction::Paste => actions.push(UiAction::Paste),
+                ShortcutAction::Delete => actions.push(UiAction::AskDeleteSelection),
+                ShortcutAction::Rename => {
+                    if let [single] = self.pane().selected_in_order().as_slice() {
+                        actions.push(UiAction::StartRename(single.clone()));
+                    }
+                }
+                ShortcutAction::AddressBar => self.pane_mut().open_address_bar(),
+                ShortcutAction::ToggleSplit => self.toggle_split(),
+                ShortcutAction::NewTab => self.new_tab(),
+                ShortcutAction::CloseTab => self.close_tab(self.active_tab),
+                ShortcutAction::NextTab => self.next_tab(),
             }
-        }
-        if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::T))) {
-            self.new_tab();
-        }
-        if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::W))) {
-            self.close_tab(self.active_tab);
-        }
-        if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::Tab))) {
-            self.next_tab();
         }
     }
 }
@@ -435,5 +440,6 @@ impl eframe::App for App {
         }
 
         ui::dialogs::show(self, ui.ctx());
+        ui::settings::show(self, ui.ctx());
     }
 }

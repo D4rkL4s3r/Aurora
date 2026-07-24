@@ -5,6 +5,7 @@ mod actions;
 mod app;
 mod fs_ops;
 mod pane;
+mod shortcuts;
 mod tab;
 mod ui;
 

@@ -77,11 +77,10 @@ pub(crate) fn show(app: &mut App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>
                 address_bar(app, ui, actions);
             } else {
                 breadcrumb(app.pane(), ui, actions);
-                if ui
-                    .small_button("✏")
-                    .on_hover_text("Saisir un chemin (Ctrl+L)")
-                    .clicked()
-                {
+                let hint = app
+                    .shortcuts
+                    .menu_label("Saisir un chemin", crate::shortcuts::ShortcutAction::AddressBar);
+                if ui.small_button("✏").on_hover_text(hint).clicked() {
                     app.pane_mut().open_address_bar();
                 }
             }
@@ -100,9 +99,15 @@ pub(crate) fn show(app: &mut App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>
                         egui::ThemePreference::Light
                     });
                 }
+                if ui.button("⚙").on_hover_text("Raccourcis clavier").clicked() {
+                    app.shortcuts_editor = Some(Default::default());
+                }
+                let split_hint = app
+                    .shortcuts
+                    .menu_label("Vue divisée", crate::shortcuts::ShortcutAction::ToggleSplit);
                 if ui
                     .selectable_label(app.is_split(), "◫")
-                    .on_hover_text("Vue divisée")
+                    .on_hover_text(split_hint)
                     .clicked()
                 {
                     app.toggle_split();

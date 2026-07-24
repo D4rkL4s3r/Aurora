@@ -83,27 +83,46 @@ fn elide(name: &str, max_chars: usize) -> String {
     }
 }
 
-fn entry_context_menu(entry: &FileEntry, response: &egui::Response, actions: &mut Vec<UiAction>) {
+fn entry_context_menu(
+    app: &App,
+    entry: &FileEntry,
+    response: &egui::Response,
+    actions: &mut Vec<UiAction>,
+) {
+    use crate::shortcuts::ShortcutAction;
+    let shortcuts = &app.shortcuts;
     response.context_menu(|ui| {
         if !entry.is_dir && ui.button("Ouvrir").clicked() {
             actions.push(UiAction::OpenFile(entry.path.clone()));
             ui.close();
         }
-        if ui.button("Renommer (F2)").clicked() {
+        if ui
+            .button(shortcuts.menu_label("Renommer", ShortcutAction::Rename))
+            .clicked()
+        {
             actions.push(UiAction::StartRename(entry.path.clone()));
             ui.close();
         }
         ui.separator();
-        if ui.button("Copier (Ctrl+C)").clicked() {
+        if ui
+            .button(shortcuts.menu_label("Copier", ShortcutAction::Copy))
+            .clicked()
+        {
             actions.push(UiAction::CopySelection { cut: false });
             ui.close();
         }
-        if ui.button("Couper (Ctrl+X)").clicked() {
+        if ui
+            .button(shortcuts.menu_label("Couper", ShortcutAction::Cut))
+            .clicked()
+        {
             actions.push(UiAction::CopySelection { cut: true });
             ui.close();
         }
         ui.separator();
-        if ui.button("Supprimer (Suppr)").clicked() {
+        if ui
+            .button(shortcuts.menu_label("Supprimer", ShortcutAction::Delete))
+            .clicked()
+        {
             actions.push(UiAction::AskDeleteSelection);
             ui.close();
         }
@@ -158,6 +177,7 @@ fn entry_drag_and_drop(
 }
 
 fn entry_interactions(
+    app: &App,
     pane: &Pane,
     entry: &FileEntry,
     response: &egui::Response,
@@ -182,7 +202,7 @@ fn entry_interactions(
     if response.secondary_clicked() {
         actions.push(UiAction::ContextSelect(entry.path.clone()));
     }
-    entry_context_menu(entry, response, actions);
+    entry_context_menu(app, entry, response, actions);
 }
 
 fn grid_card(
@@ -272,7 +292,7 @@ fn grid_card(
         }
     }
 
-    entry_interactions(pane, entry, &response, actions);
+    entry_interactions(app, pane, entry, &response, actions);
 }
 
 fn show_grid(
@@ -442,7 +462,7 @@ fn show_content(app: &App, pane_idx: usize, ui: &mut egui::Ui, actions: &mut Vec
                 });
 
                 let response = row.response();
-                entry_interactions(pane, entry, &response, actions);
+                entry_interactions(app, pane, entry, &response, actions);
             });
         });
 }
