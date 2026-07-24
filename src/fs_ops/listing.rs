@@ -107,6 +107,24 @@ pub fn list_dir(path: &Path) -> io::Result<Vec<FileEntry>> {
     Ok(entries)
 }
 
+/// Espace (total, libre) en octets d'un lecteur.
+pub fn drive_usage(path: &Path) -> Option<(u64, u64)> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+    use windows::core::PCWSTR;
+    let wide: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let (mut total, mut free) = (0u64, 0u64);
+    unsafe {
+        GetDiskFreeSpaceExW(PCWSTR(wide.as_ptr()), Some(&mut free), Some(&mut total), None)
+            .ok()?;
+    }
+    (total > 0).then_some((total, free))
+}
+
 /// Liste les lecteurs Windows disponibles (ex. `C:\`, `D:\`), triés par lettre.
 pub fn list_drives() -> Vec<PathBuf> {
     let mask = unsafe { windows::Win32::Storage::FileSystem::GetLogicalDrives() };

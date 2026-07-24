@@ -6,20 +6,24 @@ pub(crate) fn show(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
         egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(12, 8));
     egui::Panel::bottom("statusbar").frame(frame).show(ui, |ui| {
         ui.horizontal(|ui| {
+            let at_home = app.pane().is_home();
             let selected = app.pane().selection.len();
-            let summary = if selected > 0 {
-                format!("{selected} élément(s) sélectionné(s)")
-            } else {
-                format!("{} élément(s)", app.pane().displayed_count())
-            };
-            ui.label(egui::RichText::new(summary).small().weak());
+            if !at_home {
+                let summary = if selected > 0 {
+                    format!("{selected} élément(s) sélectionné(s)")
+                } else {
+                    format!("{} élément(s)", app.pane().displayed_count())
+                };
+                ui.label(egui::RichText::new(summary).small().weak());
+            }
             if let Some(status) = &app.status {
-                ui.separator();
+                if !at_home {
+                    ui.separator();
+                }
                 ui.label(egui::RichText::new(status.clone()).small());
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let at_home = app.pane().is_home();
                 if !at_home {
                     for (idx, external) in app.external_apps.iter().enumerate().rev() {
                         if ui

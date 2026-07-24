@@ -12,6 +12,8 @@ pub struct App {
     /// Index de l'onglet actif, cible de la toolbar, de la sidebar et des raccourcis.
     pub(crate) active_tab: usize,
     pub(crate) drives: Vec<PathBuf>,
+    /// Espace (total, libre) par lecteur, mesuré au démarrage pour l'accueil.
+    pub(crate) drive_usage: std::collections::HashMap<PathBuf, (u64, u64)>,
     pub(crate) quick_access: Vec<QuickAccessEntry>,
     pub(crate) clipboard: Vec<PathBuf>,
     pub(crate) clipboard_cut: bool,
@@ -34,10 +36,16 @@ pub struct App {
 
 impl Default for App {
     fn default() -> Self {
+        let drives = fs_ops::list_drives();
+        let drive_usage = drives
+            .iter()
+            .filter_map(|d| fs_ops::drive_usage(d).map(|usage| (d.clone(), usage)))
+            .collect();
         Self {
             tabs: vec![Tab::home()],
             active_tab: 0,
-            drives: fs_ops::list_drives(),
+            drives,
+            drive_usage,
             quick_access: fs_ops::list_quick_access(),
             clipboard: Vec::new(),
             clipboard_cut: false,
