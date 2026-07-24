@@ -237,16 +237,27 @@ fn grid_card(
             egui::Pos2::new(rect.center().x, rect.top() + 36.0),
             egui::Vec2::splat(48.0),
         );
-        let icon_tex = app.icons.borrow_mut().get(&response.ctx, entry);
-        if let Some(tex) = icon_tex {
+        let tint = if is_cut {
+            egui::Color32::from_white_alpha(110)
+        } else {
+            egui::Color32::WHITE
+        };
+        if let Some(thumb) = app.thumbs.borrow_mut().get(entry) {
+            // Miniature réelle, ajustée sans déformation dans la zone d'icône.
+            let area = egui::Rect::from_center_size(tile.center(), egui::Vec2::new(88.0, 60.0));
+            let size = thumb.size_vec2();
+            let scale = (area.width() / size.x).min(area.height() / size.y);
+            let draw_rect = egui::Rect::from_center_size(area.center(), size * scale);
+            painter.image(
+                thumb.id(),
+                draw_rect,
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                tint,
+            );
+        } else if let Some(tex) = app.icons.borrow_mut().get(&response.ctx, entry) {
             // Vraie icône système sur un fond neutre discret.
             painter.rect_filled(tile, 10.0, visuals.faint_bg_color);
             let icon_rect = egui::Rect::from_center_size(tile.center(), egui::Vec2::splat(32.0));
-            let tint = if is_cut {
-                egui::Color32::from_white_alpha(110)
-            } else {
-                egui::Color32::WHITE
-            };
             painter.image(
                 tex.id(),
                 icon_rect,

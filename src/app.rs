@@ -28,6 +28,8 @@ pub struct App {
     pub(crate) shortcuts_editor: Option<ShortcutsEditor>,
     /// Applications externes configurées (9.3).
     pub(crate) external_apps: Vec<fs_ops::ExternalApp>,
+    /// Miniatures d'images de la vue grille, chargées en tâche de fond.
+    pub(crate) thumbs: std::cell::RefCell<ui::thumbs::ThumbnailCache>,
 }
 
 impl Default for App {
@@ -48,6 +50,7 @@ impl Default for App {
             shortcuts: ShortcutMap::load(),
             shortcuts_editor: None,
             external_apps: fs_ops::load_external_apps(),
+            thumbs: std::cell::RefCell::new(ui::thumbs::ThumbnailCache::default()),
         }
     }
 }
@@ -436,6 +439,8 @@ impl eframe::App for App {
             ui.ctx()
                 .request_repaint_after(std::time::Duration::from_millis(50));
         }
+
+        self.thumbs.borrow_mut().poll(ui.ctx());
 
         let mut actions: Vec<UiAction> = Vec::new();
 

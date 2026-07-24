@@ -11,4 +11,5 @@ pub(crate) mod sidebar;
 pub(crate) mod statusbar;
 pub(crate) mod tabs;
 pub(crate) mod theme;
+pub(crate) mod thumbs;
 pub(crate) mod toolbar;
