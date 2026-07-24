@@ -3,7 +3,7 @@ use crate::app::App;
 
 pub(crate) fn show(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
     let frame =
-        egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(10, 6));
+        egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(12, 8));
     egui::Panel::bottom("statusbar").frame(frame).show(ui, |ui| {
         ui.horizontal(|ui| {
             let selected = app.pane().selection.len();

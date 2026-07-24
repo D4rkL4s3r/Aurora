@@ -61,7 +61,8 @@ fn address_bar(app: &mut App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
 }
 
 pub(crate) fn show(app: &mut App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
-    let frame = egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(10, 8));
+    let frame =
+        egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(12, 10));
     egui::Panel::top("toolbar").frame(frame).show(ui, |ui| {
         ui.horizontal(|ui| {
             ui.add_enabled_ui(!app.pane().history.is_empty(), |ui| {

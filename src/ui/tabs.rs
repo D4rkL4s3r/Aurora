@@ -5,7 +5,7 @@ use crate::shortcuts::ShortcutAction;
 /// ou ✖ pour fermer, ＋ pour ouvrir un nouvel onglet sur le dossier courant.
 pub(crate) fn show(app: &mut App, ui: &mut egui::Ui) {
     let frame =
-        egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(6, 4));
+        egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(10, 6));
     egui::Panel::top("tabs").frame(frame).show(ui, |ui| {
         ui.horizontal(|ui| {
             let mut activate: Option<usize> = None;

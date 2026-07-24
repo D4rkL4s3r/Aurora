@@ -28,14 +28,14 @@ pub(crate) fn show(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
 fn pane_frame(app: &App, idx: usize, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
     let active = idx == app.tab().active_pane;
     let stroke = if active {
-        egui::Stroke::new(1.5, theme::accent().gamma_multiply(0.7))
+        egui::Stroke::new(1.2, theme::accent().gamma_multiply(0.6))
     } else {
         ui.visuals().widgets.noninteractive.bg_stroke
     };
     egui::Frame::default()
         .stroke(stroke)
-        .corner_radius(6.0)
-        .inner_margin(6.0)
+        .corner_radius(10.0)
+        .inner_margin(8.0)
         .show(ui, |ui| {
             // Poussé avant les actions des entrées : le changement de volet actif
             // s'applique donc avant la sélection issue du même clic.
@@ -222,15 +222,15 @@ fn grid_card(
         let painter = ui.painter();
 
         if selected {
-            painter.rect_filled(rect, 8.0, visuals.selection.bg_fill.gamma_multiply(0.55));
+            painter.rect_filled(rect, 10.0, visuals.selection.bg_fill.gamma_multiply(0.55));
             painter.rect_stroke(
                 rect,
-                8.0,
-                egui::Stroke::new(1.5, theme::accent()),
+                10.0,
+                egui::Stroke::new(1.2, theme::accent().gamma_multiply(0.9)),
                 egui::StrokeKind::Inside,
             );
         } else if response.hovered() {
-            painter.rect_filled(rect, 8.0, visuals.faint_bg_color);
+            painter.rect_filled(rect, 10.0, visuals.faint_bg_color);
         }
 
         let tile = egui::Rect::from_center_size(
@@ -256,7 +256,7 @@ fn grid_card(
             );
         } else if let Some(tex) = app.icons.borrow_mut().get(&response.ctx, entry) {
             // Vraie icône système sur un fond neutre discret.
-            painter.rect_filled(tile, 10.0, visuals.faint_bg_color);
+            painter.rect_filled(tile, 12.0, visuals.faint_bg_color);
             let icon_rect = egui::Rect::from_center_size(tile.center(), egui::Vec2::splat(32.0));
             painter.image(
                 tex.id(),
@@ -270,7 +270,7 @@ fn grid_card(
             } else {
                 entry_tile_color(entry)
             };
-            painter.rect_filled(tile, 10.0, tile_color);
+            painter.rect_filled(tile, 12.0, tile_color);
             painter.text(
                 tile.center(),
                 egui::Align2::CENTER_CENTER,
@@ -318,7 +318,7 @@ fn show_grid(
         .auto_shrink([false; 2])
         .show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
-                ui.spacing_mut().item_spacing = egui::Vec2::new(10.0, 10.0);
+                ui.spacing_mut().item_spacing = egui::Vec2::new(12.0, 12.0);
                 for &i in displayed_idx {
                     grid_card(app, pane, &base[i], ui, actions);
                 }
@@ -373,7 +373,7 @@ fn show_content(app: &App, pane_idx: usize, ui: &mut egui::Ui, actions: &mut Vec
         .column(egui_extras::Column::auto())
         .column(egui_extras::Column::auto())
         .column(egui_extras::Column::auto())
-        .header(22.0, |mut header| {
+        .header(26.0, |mut header| {
             header.col(|ui| {
                 if ui.selectable_label(false, sort_label("Nom", SortColumn::Name)).clicked() {
                     actions.push(UiAction::SortBy(SortColumn::Name));
@@ -405,7 +405,7 @@ fn show_content(app: &App, pane_idx: usize, ui: &mut egui::Ui, actions: &mut Vec
             });
         })
         .body(|body| {
-            body.rows(26.0, displayed_idx.len(), |mut row| {
+            body.rows(30.0, displayed_idx.len(), |mut row| {
                 let entry = &base[displayed_idx[row.index()]];
                 let is_selected = pane.selection.contains(&entry.path);
                 row.set_selected(is_selected);

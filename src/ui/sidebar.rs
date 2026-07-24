@@ -10,7 +10,7 @@ fn section_header(ui: &mut egui::Ui, title: &str) {
 
 pub(crate) fn show(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
     let frame =
-        egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(10, 8));
+        egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(12, 10));
     egui::Panel::left("sidebar").frame(frame).show(ui, |ui| {
         // Items étirés sur toute la largeur : zone de clic et surbrillance pleine ligne
         ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
