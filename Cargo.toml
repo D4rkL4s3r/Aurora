@@ -2,6 +2,16 @@
 name = "aurora"
 version = "0.1.0"
 edition = "2024"
+description = "Explorateur de fichiers moderne pour Windows"
+
+# Configuration de `cargo packager` : génère un installeur NSIS
+# (Aurora_x.y.z_x64-setup.exe) à partir du build release.
+[package.metadata.packager]
+product-name = "Aurora"
+identifier = "com.d4rkl4s3r.aurora"
+icons = ["assets/aurora.ico"]
+formats = ["nsis"]
+category = "Utility"
 
 [profile.release]
 lto = true
