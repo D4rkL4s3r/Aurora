@@ -1,6 +1,7 @@
 //! Logique fichiers, sans aucune dépendance UI.
 
 mod external;
+mod filters;
 mod listing;
 mod operations;
 mod search;
@@ -9,6 +10,7 @@ pub use external::{
     ExternalApp, launch_external, load_external_apps, open_in_vscode, open_terminal_here,
     save_external_apps,
 };
+pub use filters::{DateFilter, SizeFilter};
 pub use listing::{
     FileEntry, FileKind, QuickAccessEntry, drive_usage, list_dir, list_drives, list_quick_access,
 };

@@ -2,7 +2,6 @@
 //! jamais l'état directement : elles émettent des [`crate::actions::UiAction`].
 
 pub(crate) mod dialogs;
-pub(crate) mod file_table;
 pub(crate) mod filters;
 pub(crate) mod format;
 pub(crate) mod home;
@@ -13,4 +12,5 @@ pub(crate) mod statusbar;
 pub(crate) mod tabs;
 pub(crate) mod theme;
 pub(crate) mod thumbs;
+pub(crate) mod views;
 pub(crate) mod toolbar;

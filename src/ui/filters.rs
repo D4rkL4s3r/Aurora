@@ -2,8 +2,7 @@
 //! Les filtres appartiennent au volet actif et se réinitialisent en naviguant.
 
 use crate::app::App;
-use crate::fs_ops::FileKind;
-use crate::pane::{DateFilter, SizeFilter};
+use crate::fs_ops::{DateFilter, FileKind, SizeFilter};
 
 pub(crate) fn show(app: &mut App, ui: &mut egui::Ui) {
     if !app.show_filters {

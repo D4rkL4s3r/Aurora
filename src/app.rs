@@ -465,7 +465,7 @@ impl eframe::App for App {
         ui::filters::show(self, ui);
         ui::statusbar::show(self, ui, &mut actions);
         ui::sidebar::show(self, ui, &mut actions);
-        ui::file_table::show(self, ui, &mut actions);
+        ui::views::show(self, ui, &mut actions);
 
         self.handle_shortcuts(ui, &mut actions);
         self.handle_file_drops(ui.ctx());
