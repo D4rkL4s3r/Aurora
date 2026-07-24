@@ -4,6 +4,7 @@
 pub(crate) mod dialogs;
 pub(crate) mod file_table;
 pub(crate) mod format;
+pub(crate) mod icons;
 pub(crate) mod sidebar;
 pub(crate) mod statusbar;
 pub(crate) mod theme;

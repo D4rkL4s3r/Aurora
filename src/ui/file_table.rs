@@ -214,19 +214,37 @@ fn grid_card(
             egui::Pos2::new(rect.center().x, rect.top() + 36.0),
             egui::Vec2::splat(48.0),
         );
-        let tile_color = if is_cut {
-            entry_tile_color(entry).gamma_multiply(0.4)
+        let icon_tex = app.icons.borrow_mut().get(&response.ctx, entry);
+        if let Some(tex) = icon_tex {
+            // Vraie icône système sur un fond neutre discret.
+            painter.rect_filled(tile, 10.0, visuals.faint_bg_color);
+            let icon_rect = egui::Rect::from_center_size(tile.center(), egui::Vec2::splat(32.0));
+            let tint = if is_cut {
+                egui::Color32::from_white_alpha(110)
+            } else {
+                egui::Color32::WHITE
+            };
+            painter.image(
+                tex.id(),
+                icon_rect,
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                tint,
+            );
         } else {
-            entry_tile_color(entry)
-        };
-        painter.rect_filled(tile, 10.0, tile_color);
-        painter.text(
-            tile.center(),
-            egui::Align2::CENTER_CENTER,
-            entry_icon(entry),
-            egui::FontId::proportional(24.0),
-            egui::Color32::WHITE,
-        );
+            let tile_color = if is_cut {
+                entry_tile_color(entry).gamma_multiply(0.4)
+            } else {
+                entry_tile_color(entry)
+            };
+            painter.rect_filled(tile, 10.0, tile_color);
+            painter.text(
+                tile.center(),
+                egui::Align2::CENTER_CENTER,
+                entry_icon(entry),
+                egui::FontId::proportional(24.0),
+                egui::Color32::WHITE,
+            );
+        }
 
         let text_color = if is_cut {
             visuals.weak_text_color()
@@ -376,15 +394,28 @@ fn show_content(app: &App, pane_idx: usize, ui: &mut egui::Ui, actions: &mut Vec
                     entry.name.clone()
                 };
                 let is_cut = app.clipboard_cut && app.clipboard.contains(&entry.path);
-                let mut text =
-                    egui::RichText::new(format!("{} {display_name}", entry_icon(entry)));
-                if is_cut {
-                    text = text.weak();
-                }
 
                 row.col(|ui| {
-                    // Ellipse sur les noms trop longs plutôt que coupure brute
-                    ui.add(egui::Label::new(text.clone()).truncate());
+                    let icon_tex = app.icons.borrow_mut().get(ui.ctx(), entry);
+                    let mut name = egui::RichText::new(&display_name);
+                    if is_cut {
+                        name = name.weak();
+                    }
+                    ui.horizontal(|ui| {
+                        match icon_tex {
+                            Some(tex) => {
+                                ui.add(
+                                    egui::Image::new(&tex)
+                                        .fit_to_exact_size(egui::Vec2::splat(16.0)),
+                                );
+                            }
+                            None => {
+                                ui.label(entry_icon(entry));
+                            }
+                        }
+                        // Ellipse sur les noms trop longs plutôt que coupure brute
+                        ui.add(egui::Label::new(name).truncate());
+                    });
                 });
                 row.col(|ui| {
                     if !entry.is_dir {

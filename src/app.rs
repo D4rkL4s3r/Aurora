@@ -17,6 +17,8 @@ pub struct App {
     pub(crate) status: Option<String>,
     pub(crate) dark_theme: bool,
     pub(crate) grid_view: bool,
+    /// RefCell : le rendu (en `&App`) alimente le cache d'icônes au fil des frames.
+    pub(crate) icons: std::cell::RefCell<ui::icons::IconCache>,
 }
 
 impl Default for App {
@@ -32,6 +34,7 @@ impl Default for App {
             status: None,
             dark_theme: true,
             grid_view: true,
+            icons: std::cell::RefCell::new(ui::icons::IconCache::default()),
         }
     }
 }
