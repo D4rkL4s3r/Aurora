@@ -19,6 +19,23 @@ pub(crate) fn show(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .button("🖳 Terminal")
+                    .on_hover_text("Ouvrir un terminal ici")
+                    .clicked()
+                {
+                    actions.push(UiAction::OpenTerminal);
+                }
+                if ui
+                    .button("</> Code")
+                    .on_hover_text("Ouvrir dans VS Code")
+                    .clicked()
+                {
+                    actions.push(UiAction::OpenVsCode);
+                }
+                if !app.clipboard.is_empty() || selected > 0 {
+                    ui.separator();
+                }
                 if !app.clipboard.is_empty() && ui.button("Coller").clicked() {
                     actions.push(UiAction::Paste);
                 }

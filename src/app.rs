@@ -121,6 +121,16 @@ impl App {
                     self.status = Some(status);
                 }
             }
+            UiAction::OpenTerminal => {
+                if let Err(e) = fs_ops::open_terminal_here(&self.pane.current_path) {
+                    self.status = Some(format!("Terminal impossible : {e}"));
+                }
+            }
+            UiAction::OpenVsCode => {
+                if let Err(e) = fs_ops::open_in_vscode(&self.pane.current_path) {
+                    self.status = Some(format!("VS Code impossible : {e}"));
+                }
+            }
         }
     }
 

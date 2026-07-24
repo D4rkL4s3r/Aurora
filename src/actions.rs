@@ -20,4 +20,6 @@ pub(crate) enum UiAction {
     Paste,
     SortBy(SortColumn),
     RunRecursiveSearch,
+    OpenTerminal,
+    OpenVsCode,
 }
