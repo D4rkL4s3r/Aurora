@@ -33,6 +33,31 @@ fn breadcrumb(app: &App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
     }
 }
 
+/// Barre d'adresse éditable : Entrée valide le chemin, Échap ou perte de
+/// focus annule et réaffiche le breadcrumb.
+fn address_bar(app: &mut App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
+    let Some(text) = app.pane.address_edit.as_mut() else {
+        return;
+    };
+    let width = (ui.available_width() - 340.0).max(160.0);
+    let edit = ui.add(egui::TextEdit::singleline(text).desired_width(width));
+    if app.pane.address_focus {
+        edit.request_focus();
+        app.pane.address_focus = false;
+    }
+    if edit.lost_focus() {
+        if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            let path = PathBuf::from(text.trim());
+            if path.is_dir() {
+                actions.push(UiAction::Navigate(path));
+            } else {
+                app.status = Some(format!("Dossier introuvable : {}", text.trim()));
+            }
+        }
+        app.pane.address_edit = None;
+    }
+}
+
 pub(crate) fn show(app: &mut App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>) {
     let frame = egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(10, 8));
     egui::Panel::top("toolbar").frame(frame).show(ui, |ui| {
@@ -46,7 +71,18 @@ pub(crate) fn show(app: &mut App, ui: &mut egui::Ui, actions: &mut Vec<UiAction>
                 app.go_parent();
             }
             ui.separator();
-            breadcrumb(app, ui, actions);
+            if app.pane.address_edit.is_some() {
+                address_bar(app, ui, actions);
+            } else {
+                breadcrumb(app, ui, actions);
+                if ui
+                    .small_button("✏")
+                    .on_hover_text("Saisir un chemin (Ctrl+L)")
+                    .clicked()
+                {
+                    app.pane.open_address_bar();
+                }
+            }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let theme_icon = if app.dark_theme { "☀" } else { "🌙" };

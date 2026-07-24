@@ -175,6 +175,9 @@ impl App {
         if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::A))) {
             self.pane.select_all();
         }
+        if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::L))) {
+            self.pane.open_address_bar();
+        }
         if ui.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(ctrl, Key::C))) {
             actions.push(UiAction::CopySelection { cut: false });
         }

@@ -28,6 +28,10 @@ pub(crate) struct Pane {
     /// silencieusement le résultat du chargement précédent.
     pending_load: Option<Receiver<std::io::Result<Vec<FileEntry>>>>,
     pub(crate) load_error: Option<String>,
+    /// Texte de la barre d'adresse en cours d'édition (None = breadcrumb affiché).
+    pub(crate) address_edit: Option<String>,
+    /// Donne le focus au champ d'adresse à la prochaine frame.
+    pub(crate) address_focus: bool,
 }
 
 impl Pane {
@@ -44,6 +48,8 @@ impl Pane {
             sort_ascending: true,
             pending_load: None,
             load_error: None,
+            address_edit: None,
+            address_focus: false,
         };
         pane.reload();
         pane
@@ -149,6 +155,11 @@ impl Pane {
             self.clear_search();
             self.reload();
         }
+    }
+
+    pub(crate) fn open_address_bar(&mut self) {
+        self.address_edit = Some(self.current_path.display().to_string());
+        self.address_focus = true;
     }
 
     pub(crate) fn clear_search(&mut self) {
