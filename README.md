@@ -34,34 +34,51 @@ terme.
 
 ## Fonctionnalités
 
-### Déjà là (ou en cours d'implémentation immédiate)
+### Navigation
 
-- Navigation dans les dossiers (double-clic, dossier parent, précédent,
-  breadcrumb)
-- Liste des lecteurs et raccourcis "Accès rapide" (Bureau, Documents,
-  Téléchargements...)
-- Opérations de base : créer un dossier, renommer, supprimer (corbeille),
-  ouvrir avec l'application par défaut
+- Double-clic, dossier parent, précédent/suivant, breadcrumb cliquable
+- Barre d'adresse éditable (Ctrl+L)
+- Écran d'accueil : accès rapide (Bureau, Documents, Téléchargements...) et
+  lecteurs avec jauge d'utilisation du disque
+- **Onglets** (Ctrl+T / Ctrl+W / Ctrl+Tab), chacun avec son propre état
+- **Vue divisée** (Ctrl+D) : deux volets indépendants côte à côte
+
+### Affichage
+
+- Vue liste détaillée avec tri par colonnes (nom, taille, date...)
+- Vue grille avec tuiles colorées et miniatures d'images (chargées en
+  arrière-plan, mises en cache)
+- Icônes système réelles par type de fichier
+- Rendu performant sur les gros dossiers (liste virtualisée, chargement
+  asynchrone)
+- Thème clair/sombre et couleur d'accent personnalisable
+
+### Fichiers
+
+- Créer un dossier, renommer (F2), supprimer (vers la corbeille), ouvrir avec
+  l'application par défaut
 - Multi-sélection (clic, Ctrl+clic, Shift+clic, Ctrl+A) et
   copier/couper/coller
-- Recherche par nom dans le dossier courant
-- Icônes système réelles par type de fichier
-- Rendu performant même sur des dossiers volumineux (liste virtualisée,
-  chargement asynchrone)
+- Glisser-déposer interne (Ctrl pour copier) et depuis l'Explorateur Windows
+- Recherche par nom dans le dossier courant, plus filtres rapides par type,
+  taille et date
 
-### Prévu ensuite
+### Intégrations et personnalisation
 
-- Glisser-déposer interne et depuis l'Explorateur Windows natif
-- Ouverture rapide du dossier courant dans un terminal (Windows Terminal /
-  PowerShell / cmd) ou dans VS Code
-- Vue divisée (deux volets côte à côte dans la même fenêtre)
-- Vue liste détaillée avec tri par colonnes
-- Thème clair/sombre
+- Ouvrir le dossier courant dans un terminal (Windows Terminal / PowerShell /
+  cmd) ou dans VS Code
+- Liste d'applications externes configurable, avec boutons dans la barre
+  d'état
+- Raccourcis clavier configurables (éditeur intégré, stockés dans
+  `%APPDATA%urora\shortcuts.conf`)
 
-Le détail complet, découpé en petites étapes, est dans
-[`docs/plan-implementation.md`](docs/plan-implementation.md) et la liste
+### Et ensuite
+
+Le détail, découpé en petites étapes, est dans
+[`docs/plan-implémentation.md`](docs/plan-impl%C3%A9mentation.md) et la liste
 complète des fonctionnalités envisagées (y compris celles pas encore
-planifiées) dans [`docs/fonctionnalites.md`](docs/fonctionnalites.md).
+planifiées) dans
+[`docs/fonctionnalites-explorateur.md`](docs/fonctionnalites-explorateur.md).
 
 ## Statut du projet
 
@@ -72,7 +89,7 @@ Win32 pour les icônes et les lecteurs).
 ## Installation (développement)
 
 Prérequis :
-- [Rust](https://rustup.rs) (édition 2021, toolchain stable)
+- [Rust](https://rustup.rs) 1.85 ou plus récent (édition 2024, toolchain stable)
 - Windows 10/11
 
 ```powershell
@@ -87,8 +104,25 @@ cargo run
 cargo build --release
 ```
 
-L'exécutable se trouve ensuite dans `target/release/`.
+L'exécutable se trouve ensuite dans `target/release/aurora.exe`.
+
+## Installeur
+
+Un installeur NSIS peut être généré avec
+[`cargo-packager`](https://crates.io/crates/cargo-packager) (la configuration
+est dans `Cargo.toml`) :
+
+```powershell
+cargo install cargo-packager --locked   # une seule fois
+cargo packager --release
+```
+
+Cela produit un `Aurora_x.y.z_x64-setup.exe`.
 
 ## Licence
 
-Projet personnel, pas encore de licence définie.
+Copyright © 2026 D4rkL4s3r — tous droits réservés.
+
+Le code source est publié pour consultation uniquement. Toute utilisation,
+copie, modification ou redistribution, en tout ou partie, nécessite mon accord
+écrit préalable. Voir le fichier [`LICENSE`](LICENSE).
